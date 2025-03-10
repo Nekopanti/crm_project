@@ -24,7 +24,7 @@ from .serializers import (
 
 # 自定义分页
 class AccountPagination(PageNumberPagination):
-    page_size = 10  # 每页显示 10 条数据
+    page_size = 20  # 每页显示 10 条数据
     page_size_query_param = "page_size"
     max_page_size = 100  # 限制最大分页
 
@@ -32,15 +32,14 @@ class AccountPagination(PageNumberPagination):
 class AccountViewSet(ModelViewSet):
     """
     Account 视图：
-    - 获取账户列表（PageList + PageListField）
+    - 获取账户列表（Object + ObjectField）
     - 获取账户详情（PageLayout + PageLayoutField）
-    - 创建账户（Object + ObjectField）
+    - 创建账户（Object + ObjectField）      
     - 修改账户（Object + 相关字段）
     - 删除账户（Object 及相关字段）
     """
 
-    # 默认查询 PageList（因为列表视图主要来自 PageList）
-    queryset = PageList.objects.all()
+    queryset = Object.objects.all()
     serializer_class = PageListSerializer  # 主要序列化器
     pagination_class = AccountPagination  # 启用分页
     filter_backends = [SearchFilter, OrderingFilter]  # 支持搜索 & 排序
