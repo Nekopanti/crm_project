@@ -1,12 +1,14 @@
+import uuid
 from django.db import models
+
 
 # Create your models here.
 
 
 class Object(models.Model):
-    id = models.CharField(max_length=32, primary_key=True)
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)
-    label = models.CharField(max_length=255)
+    label = models.CharField(max_length=255, null=True, blank=True)
     table_name = models.CharField(max_length=255)
     deleted = models.CharField(max_length=1, default="0", db_default="0")
 
@@ -18,7 +20,7 @@ class Object(models.Model):
 
 
 class ObjectField(models.Model):
-    id = models.CharField(max_length=32, primary_key=True)
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     object = models.ForeignKey(Object, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=255)
@@ -32,9 +34,9 @@ class ObjectField(models.Model):
 
 
 class PageList(models.Model):
-    id = models.CharField(max_length=32, primary_key=True)
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)
-    label = models.CharField(max_length=255)
+    label = models.CharField(max_length=255, null=True, blank=True)
     deleted = models.CharField(max_length=1, default="0", db_default="0")
 
     def __str__(self):
@@ -45,7 +47,7 @@ class PageList(models.Model):
 
 
 class PageListField(models.Model):
-    id = models.CharField(max_length=32, primary_key=True)
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)
     object_field = models.ForeignKey(ObjectField, on_delete=models.CASCADE)
     page_list = models.ForeignKey(PageList, on_delete=models.CASCADE)
@@ -61,7 +63,7 @@ class PageListField(models.Model):
 
 
 class PageLayout(models.Model):
-    id = models.CharField(max_length=32, primary_key=True)
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)
     page_list = models.ForeignKey(PageList, on_delete=models.CASCADE)
     deleted = models.CharField(max_length=1, default="0", db_default="0")
@@ -74,9 +76,9 @@ class PageLayout(models.Model):
 
 
 class PageLayoutField(models.Model):
-    id = models.CharField(max_length=32, primary_key=True)
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     name = models.CharField(max_length=255)
-    label = models.CharField(max_length=255)
+    label = models.CharField(max_length=255, null=True, blank=True)
     page_layout = models.ForeignKey(PageLayout, on_delete=models.CASCADE)
     object_field = models.ForeignKey(ObjectField, on_delete=models.CASCADE)
     type = models.CharField(max_length=255)

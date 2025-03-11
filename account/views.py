@@ -24,22 +24,13 @@ from .serializers import (
 
 # 自定义分页
 class AccountPagination(PageNumberPagination):
-    page_size = 20  # 每页显示 10 条数据
+    page_size = 20  # 每页显示 20 条数据
     page_size_query_param = "page_size"
-    max_page_size = 100  # 限制最大分页
+    max_page_size = 100
 
 
 class AccountViewSet(ModelViewSet):
-    """
-    Account 视图：
-    - 获取账户列表（Object + ObjectField）
-    - 获取账户详情（PageLayout + PageLayoutField）
-    - 创建账户（Object + ObjectField）      
-    - 修改账户（Object + 相关字段）
-    - 删除账户（Object 及相关字段）
-    """
-
-    queryset = Object.objects.all()
+    queryset = PageList.objects.all()
     serializer_class = PageListSerializer  # 主要序列化器
     pagination_class = AccountPagination  # 启用分页
     filter_backends = [SearchFilter, OrderingFilter]  # 支持搜索 & 排序
@@ -48,96 +39,244 @@ class AccountViewSet(ModelViewSet):
     ordering = ["id"]  # 默认按 id 排序
 
     def retrieve(self, request, pk=None):
-        """获取某个账户详情（PageLayout + PageLayoutField）"""
+        """获取某个账户详情（PageList + PageListField + PageLayout + PageLayoutField）"""
         try:
-            page_layout = PageLayout.objects.get(id=pk)
-            serialized_page_layout = PageLayoutSerializer(page_layout).data
+            page_list = PageList.objects.get(id=pk)
+            serialized_page_list = PageListSerializer(page_list).data
 
-            page_layout_fields = PageLayoutField.objects.filter(page_layout=page_layout)
+            # 获取与 PageList 关联的 PageListField
+            page_list_fields = PageListField.objects.filter(page_list=page_list)
+            serialized_page_list_fields = PageListFieldSerializer(
+                page_list_fields, many=True
+            ).data
+
+            # 获取与 PageList 关联的 PageLayout 和 PageLayoutField
+            page_layouts = PageLayout.objects.filter(page_list=page_list)
+            serialized_page_layouts = PageLayoutSerializer(page_layouts, many=True).data
+
+            page_layout_fields = PageLayoutField.objects.filter(
+                page_layout__in=page_layouts
+            )
             serialized_page_layout_fields = PageLayoutFieldSerializer(
                 page_layout_fields, many=True
             ).data
 
             return Response(
                 {
-                    "layout": serialized_page_layout,
-                    "fields": serialized_page_layout_fields,
+                    "page_list": serialized_page_list,
+                    "page_list_fields": serialized_page_list_fields,
+                    "page_layouts": serialized_page_layouts,
+                    "page_layout_fields": serialized_page_layout_fields,
                 }
             )
-        except PageLayout.DoesNotExist:
+        except PageList.DoesNotExist:
             return Response({"error": "账户不存在"}, status=status.HTTP_404_NOT_FOUND)
 
     def create(self, request):
-        """创建账户（Object + ObjectField）"""
-        with transaction.atomic():
+        """创建账户（Object + ObjectField + PageList + PageListField + PageLayout + PageLayoutField）"""
+        with transaction.atomic():  # 保证数据一致性
+            # 创建 Object 和 ObjectField
             object_data = request.data.get("object", {})
             object_serializer = ObjectSerializer(data=object_data)
-
             if object_serializer.is_valid():
-                obj = object_serializer.save()
+                object_instance = object_serializer.save()
 
-                # 处理 ObjectField
-                fields_data = request.data.get("fields", [])
-                for field_data in fields_data:
-                    field_data["object"] = obj.id
-                    field_serializer = ObjectFieldSerializer(data=field_data)
-                    if field_serializer.is_valid():
-                        field_serializer.save()
+                # 创建 ObjectField
+                object_fields_data = request.data.get("object_fields", [])
+                for object_field_data in object_fields_data:
+                    object_field_data["object"] = object_instance.id  # 设置外键关联
+                    object_field_serializer = ObjectFieldSerializer(
+                        data=object_field_data
+                    )
+                    if object_field_serializer.is_valid():
+                        object_field_serializer.save()
                     else:
                         return Response(
-                            field_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                            object_field_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
                         )
+            else:
+                return Response(
+                    object_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
 
-                return Response(object_serializer.data, status=status.HTTP_201_CREATED)
-            return Response(
-                object_serializer.errors, status=status.HTTP_400_BAD_REQUEST
-            )
+            # 创建 PageList 和 PageListField
+            page_list_data = request.data.get("page_list", {})
+            page_list_data["object"] = object_instance.id  # 设置与 Object 的外键关联
+            page_list_serializer = PageListSerializer(data=page_list_data)
+            if page_list_serializer.is_valid():
+                page_list = page_list_serializer.save()
+
+                # 创建 PageListField
+                fields_data = request.data.get("fields", [])
+                for field_data in fields_data:
+                    field_data["page_list"] = page_list.id  # 设置外键关联
+                    page_list_field_serializer = PageListFieldSerializer(
+                        data=field_data
+                    )
+                    if page_list_field_serializer.is_valid():
+                        page_list_field_serializer.save()
+                    else:
+                        return Response(
+                            page_list_field_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+            else:
+                return Response(
+                    page_list_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # 创建 PageLayout 和 PageLayoutField
+            page_layout_data = request.data.get("page_layout", {})
+            page_layout_data["page_list"] = page_list.id  # 设置与 PageList 的外键关联
+            page_layout_serializer = PageLayoutSerializer(data=page_layout_data)
+            if page_layout_serializer.is_valid():
+                page_layout = page_layout_serializer.save()
+
+                # 创建 PageLayoutField
+                page_layout_fields_data = request.data.get("page_layout_fields", [])
+                for layout_field_data in page_layout_fields_data:
+                    layout_field_data["page_layout"] = page_layout.id  # 设置外键关联
+                    page_layout_field_serializer = PageLayoutFieldSerializer(
+                        data=layout_field_data
+                    )
+                    if page_layout_field_serializer.is_valid():
+                        page_layout_field_serializer.save()
+                    else:
+                        return Response(
+                            page_layout_field_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+            else:
+                return Response(
+                    page_layout_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            return Response(page_list_serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, pk=None):
-        """修改账户（Object + 相关字段）"""
+        """更新账户（Object + ObjectField + PageList + PageListField + PageLayout + PageLayoutField）"""
         try:
-            obj = Object.objects.get(id=pk)
+            # 更新 Object 和 ObjectField
+            object_data = request.data.get("object", {})
+            object_instance = Object.objects.get(
+                page_list__id=pk
+            )  # 假设每个 PageList 只关联一个 Object
             object_serializer = ObjectSerializer(
-                obj, data=request.data.get("object", {}), partial=True
+                object_instance, data=object_data, partial=True
             )
-
             if object_serializer.is_valid():
                 object_serializer.save()
 
                 # 更新 ObjectField
-                fields_data = request.data.get("fields", [])
-                for field_data in fields_data:
-                    field = ObjectField.objects.get(id=field_data["id"])
-                    field_serializer = ObjectFieldSerializer(
-                        field, data=field_data, partial=True
+                object_fields_data = request.data.get("object_fields", [])
+                for object_field_data in object_fields_data:
+                    object_field = ObjectField.objects.get(id=object_field_data["id"])
+                    object_field_serializer = ObjectFieldSerializer(
+                        object_field, data=object_field_data, partial=True
                     )
-                    if field_serializer.is_valid():
-                        field_serializer.save()
+                    if object_field_serializer.is_valid():
+                        object_field_serializer.save()
                     else:
                         return Response(
-                            field_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                            object_field_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+            else:
+                return Response(
+                    object_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # 更新 PageList 和 PageListField
+            page_list = PageList.objects.get(id=pk)
+            page_list_serializer = PageListSerializer(
+                page_list, data=request.data.get("page_list", {}), partial=True
+            )
+            if page_list_serializer.is_valid():
+                page_list_serializer.save()
+
+                # 更新 PageListField
+                fields_data = request.data.get("fields", [])
+                for field_data in fields_data:
+                    page_list_field = PageListField.objects.get(id=field_data["id"])
+                    page_list_field_serializer = PageListFieldSerializer(
+                        page_list_field, data=field_data, partial=True
+                    )
+                    if page_list_field_serializer.is_valid():
+                        page_list_field_serializer.save()
+                    else:
+                        return Response(
+                            page_list_field_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
                         )
 
-                return Response(object_serializer.data)
-            return Response(
-                object_serializer.errors, status=status.HTTP_400_BAD_REQUEST
-            )
+                # 更新 PageLayout 和 PageLayoutField
+                page_layout_data = request.data.get("page_layout", {})
+                page_layout_instance = PageLayout.objects.get(page_list=page_list)
+                page_layout_serializer = PageLayoutSerializer(
+                    page_layout_instance, data=page_layout_data, partial=True
+                )
+                if page_layout_serializer.is_valid():
+                    page_layout_serializer.save()
 
-        except Object.DoesNotExist:
+                    # 更新 PageLayoutField
+                    page_layout_fields_data = request.data.get("page_layout_fields", [])
+                    for layout_field_data in page_layout_fields_data:
+                        page_layout_field = PageLayoutField.objects.get(
+                            id=layout_field_data["id"]
+                        )
+                        page_layout_field_serializer = PageLayoutFieldSerializer(
+                            page_layout_field, data=layout_field_data, partial=True
+                        )
+                        if page_layout_field_serializer.is_valid():
+                            page_layout_field_serializer.save()
+                        else:
+                            return Response(
+                                page_layout_field_serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                else:
+                    return Response(
+                        page_layout_serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            return Response(page_list_serializer.data)
+        except PageList.DoesNotExist:
             return Response({"error": "账户不存在"}, status=status.HTTP_404_NOT_FOUND)
 
     def destroy(self, request, pk=None):
-        """删除账户（Object 及相关字段）"""
+        """删除账户（PageList, PageLayout, Object 及相关字段）"""
         try:
-            obj = Object.objects.get(id=pk)
-            with transaction.atomic():
-                ObjectField.objects.filter(object=obj).delete()
-                PageListField.objects.filter(page_list__object=obj).delete()
-                PageLayoutField.objects.filter(page_layout__object=obj).delete()
-                obj.delete()
+            # 获取 PageList
+            page_list = PageList.objects.get(id=pk)
 
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Object.DoesNotExist:
+            with transaction.atomic():  # 保证数据一致性
+                # 删除与 PageLayout 相关的字段
+                page_layouts = PageLayout.objects.filter(page_list=page_list)
+                for page_layout in page_layouts:
+                    # 删除 PageLayoutField
+                    PageLayoutField.objects.filter(page_layout=page_layout).delete()
+                    # 删除 PageLayout
+                    page_layout.delete()
+
+                # 删除与 PageList 相关的字段
+                PageListField.objects.filter(page_list=page_list).delete()
+
+                # 删除 PageList
+                page_list.delete()
+
+                # 删除与 Object 相关的字段
+                objects = Object.objects.filter(page_list=page_list)
+                for obj in objects:
+                    # 删除 ObjectField
+                    ObjectField.objects.filter(object=obj).delete()
+                    # 删除 Object
+                    obj.delete()
+
+                return Response(status=status.HTTP_204_NO_CONTENT)
+
+        except PageList.DoesNotExist:
             return Response({"error": "账户不存在"}, status=status.HTTP_404_NOT_FOUND)
 
 

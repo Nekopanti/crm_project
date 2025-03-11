@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { createHtmlPlugin } from 'vite-plugin-html'
+import path from 'path'
 
 export default defineConfig({
   plugins: [
@@ -13,21 +14,25 @@ export default defineConfig({
         }
       },
       template: 'index.html',
-      filename: '../../templates/index.html'  // 将 index.html 输出到 templates/ 目录
+      filename: path.resolve(__dirname, '../templates/index.html')  // 确保 index.html 输出到项目根目录下的 templates/
     })
   ],
   build: {
-    outDir: '../static',  // 将静态文件输出到 static/ 目录
-    emptyOutDir: true,     // 构建前清空输出目录
+    outDir: path.resolve(__dirname, '../static'), // 让静态资源输出到项目根目录的 static/
+    emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: './src/main.js'  // 指定入口文件
+        main: './src/main.js'
       },
       output: {
-        entryFileNames: 'js/[name].[hash].js',  // JS 文件输出到 static/js/
+        entryFileNames: 'js/[name].[hash].js',
         chunkFileNames: 'js/[name].[hash].js',
-        assetFileNames: 'assets/[name].[hash][extname]'  // 静态资源输出到 static/assets/
+        assetFileNames: 'assets/[name].[hash][extname]'
       }
     }
+  },
+  server: {
+    port: 5173,
+    host: '127.0.0.1'
   }
 })

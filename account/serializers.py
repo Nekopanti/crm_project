@@ -10,13 +10,6 @@ from .models import (
 
 
 # Object 序列化器
-class AccountViewSet(serializers.ModelSerializer):
-    class Meta:
-        model = Object
-        fields = "__all__"
-
-
-# Object 序列化器
 class ObjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Object

@@ -32,7 +32,6 @@ class DataInsert:
             with transaction.atomic():
                 # 创建 Object 数据
                 self.object1 = Object.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="account",
                     label="医生",
                     table_name="t_accounts",
@@ -41,7 +40,6 @@ class DataInsert:
 
                 # 创建 PageList 数据
                 self.page_list1 = PageList.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="account_list",
                     label="我的医生列表",
                     deleted="0",
@@ -49,7 +47,6 @@ class DataInsert:
 
                 # 创建 PageLayout 数据
                 self.page_layout1 = PageLayout.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="我的医生详情",
                     page_list=self.page_list1,
                     deleted="0",
@@ -57,28 +54,24 @@ class DataInsert:
 
                 # 创建 ObjectField 数据
                 self.object_field1 = ObjectField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="account_name",
                     type="text",
                     deleted="0",
                     object=self.object1,
                 )
                 self.object_field2 = ObjectField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="hospital",
                     type="text",
                     deleted="0",
                     object=self.object1,
                 )
                 self.object_field3 = ObjectField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="department",
                     type="text",
                     deleted="0",
                     object=self.object1,
                 )
                 self.object_field4 = ObjectField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="phone",
                     type="text",
                     deleted="0",
@@ -87,7 +80,6 @@ class DataInsert:
 
                 # 创建 PageLayoutField 数据
                 self.page_layout_field1 = PageLayoutField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="医生姓名",
                     label="Label1",
                     type="text",
@@ -96,7 +88,6 @@ class DataInsert:
                     page_layout=self.page_layout1,
                 )
                 self.page_layout_field2 = PageLayoutField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="医院",
                     label="Label2",
                     type="text",
@@ -105,7 +96,6 @@ class DataInsert:
                     page_layout=self.page_layout1,
                 )
                 self.page_layout_field3 = PageLayoutField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="科室",
                     label="Label3",
                     type="text",
@@ -116,7 +106,6 @@ class DataInsert:
 
                 # 创建 PageListField 数据
                 self.page_list_field1 = PageListField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="account_name",
                     hidden="0",
                     type="text",
@@ -125,7 +114,6 @@ class DataInsert:
                     page_list=self.page_list1,
                 )
                 self.page_list_field2 = PageListField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="hospital",
                     hidden="0",
                     type="text",
@@ -134,7 +122,6 @@ class DataInsert:
                     page_list=self.page_list1,
                 )
                 self.page_list_field3 = PageListField.objects.create(
-                    id=str(uuid.uuid4())[:32],
                     name="department",
                     hidden="0",
                     type="text",

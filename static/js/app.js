@@ -219,8 +219,8 @@ const EditAccount = {
 // 路由配置
 const routes = [
     { path: '/', component: AccountList },
-    { path: '/account/:id', component: AccountDetail },
     { path: '/account/create', component: CreateAccount },
+    { path: '/account/:id', component: AccountDetail },
     { path: '/account/edit/:id', component: EditAccount },
 ];
 
