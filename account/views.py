@@ -61,12 +61,25 @@ class AccountViewSet(ModelViewSet):
                 page_layout_fields, many=True
             ).data
 
+            # 获取与 PageListField 关联的 ObjectField 和 Object
+            object_fields = ObjectField.objects.filter(
+                id__in=page_list_fields.values("object_field")
+            )
+            serialized_object_fields = ObjectFieldSerializer(
+                object_fields, many=True
+            ).data
+
+            objects = Object.objects.filter(id__in=object_fields.values("object"))
+            serialized_objects = ObjectSerializer(objects, many=True).data
+
             return Response(
                 {
                     "page_list": serialized_page_list,
                     "page_list_fields": serialized_page_list_fields,
                     "page_layouts": serialized_page_layouts,
                     "page_layout_fields": serialized_page_layout_fields,
+                    "object": serialized_objects,
+                    "object_fields": serialized_object_fields,
                 }
             )
         except PageList.DoesNotExist:
@@ -267,10 +280,10 @@ class AccountViewSet(ModelViewSet):
     def destroy(self, request, pk=None):
         """删除账户（PageList, PageLayout, Object 及相关字段）"""
         try:
-            # 获取 PageList
+            # 获取 PageList 实例
             page_list = PageList.objects.get(id=pk)
 
-            with transaction.atomic():  # 保证数据一致性
+            with transaction.atomic():  # 开启事务，保证数据一致性
                 # 删除与 PageLayout 相关的字段
                 page_layouts = PageLayout.objects.filter(page_list=page_list)
                 for page_layout in page_layouts:
@@ -280,21 +293,27 @@ class AccountViewSet(ModelViewSet):
                     page_layout.delete()
 
                 # 删除与 PageList 相关的字段
-                PageListField.objects.filter(page_list=page_list).delete()
+                page_list_fields = PageListField.objects.filter(page_list=page_list)
+                for page_list_field in page_list_fields:
+                    # 通过 PageListField 获取 ObjectField
+                    object_field = page_list_field.object_field
+
+                    # 删除 ObjectField
+                    ObjectField.objects.filter(id=object_field.id).delete()
+
+                    # 通过 ObjectField 获取 Object
+                    object_instance = object_field.object
+
+                    # 删除 Object
+                    object_instance.delete()
+
+                # 删除 PageListField
+                page_list_fields.delete()
 
                 # 删除 PageList
                 page_list.delete()
 
-                # 删除与 Object 相关的字段
-                objects = Object.objects.filter(page_list=page_list)
-                for obj in objects:
-                    # 删除 ObjectField
-                    ObjectField.objects.filter(object=obj).delete()
-                    # 删除 Object
-                    obj.delete()
-
                 return Response(status=status.HTTP_204_NO_CONTENT)
-
         except PageList.DoesNotExist:
             return Response({"error": "账户不存在"}, status=status.HTTP_404_NOT_FOUND)
 
