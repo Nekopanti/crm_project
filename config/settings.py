@@ -98,3 +98,5 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
 ]
+
+CORS_ALLOW_METHODS = ["POST", "GET", "OPTIONS"]

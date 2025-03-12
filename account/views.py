@@ -84,12 +84,12 @@ class AccountViewSet(ModelViewSet):
                 # 创建 ObjectField
                 object_fields_data = request.data.get("object_fields", [])
                 for object_field_data in object_fields_data:
-                    object_field_data["object"] = object_instance.id  # 设置外键关联
+                    object_field_data["object"] = object_instance.id
                     object_field_serializer = ObjectFieldSerializer(
                         data=object_field_data
                     )
                     if object_field_serializer.is_valid():
-                        object_field_serializer.save()
+                        object_field = object_field_serializer.save()
                     else:
                         return Response(
                             object_field_serializer.errors,
@@ -102,15 +102,16 @@ class AccountViewSet(ModelViewSet):
 
             # 创建 PageList 和 PageListField
             page_list_data = request.data.get("page_list", {})
-            page_list_data["object"] = object_instance.id  # 设置与 Object 的外键关联
+            page_list_data["object"] = object_instance.id
             page_list_serializer = PageListSerializer(data=page_list_data)
             if page_list_serializer.is_valid():
                 page_list = page_list_serializer.save()
 
                 # 创建 PageListField
-                fields_data = request.data.get("fields", [])
+                fields_data = request.data.get("page_list_fields", [])
                 for field_data in fields_data:
-                    field_data["page_list"] = page_list.id  # 设置外键关联
+                    field_data["page_list"] = page_list.id
+                    field_data["object_field"] = object_field.id
                     page_list_field_serializer = PageListFieldSerializer(
                         data=field_data
                     )
@@ -128,7 +129,7 @@ class AccountViewSet(ModelViewSet):
 
             # 创建 PageLayout 和 PageLayoutField
             page_layout_data = request.data.get("page_layout", {})
-            page_layout_data["page_list"] = page_list.id  # 设置与 PageList 的外键关联
+            page_layout_data["page_list"] = page_list.id
             page_layout_serializer = PageLayoutSerializer(data=page_layout_data)
             if page_layout_serializer.is_valid():
                 page_layout = page_layout_serializer.save()
@@ -136,7 +137,8 @@ class AccountViewSet(ModelViewSet):
                 # 创建 PageLayoutField
                 page_layout_fields_data = request.data.get("page_layout_fields", [])
                 for layout_field_data in page_layout_fields_data:
-                    layout_field_data["page_layout"] = page_layout.id  # 设置外键关联
+                    layout_field_data["page_layout"] = page_layout.id
+                    layout_field_data["object_field"] = object_field.id
                     page_layout_field_serializer = PageLayoutFieldSerializer(
                         data=layout_field_data
                     )
@@ -155,52 +157,32 @@ class AccountViewSet(ModelViewSet):
             return Response(page_list_serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, pk=None):
-        """更新账户（Object + ObjectField + PageList + PageListField + PageLayout + PageLayoutField）"""
+        """更新账户（PageList + PageListField + ObjectField + Object + PageLayout + PageLayoutField）"""
         try:
-            # 更新 Object 和 ObjectField
-            object_data = request.data.get("object", {})
-            object_instance = Object.objects.get(
-                page_list__id=pk
-            )  # 假设每个 PageList 只关联一个 Object
-            object_serializer = ObjectSerializer(
-                object_instance, data=object_data, partial=True
-            )
-            if object_serializer.is_valid():
-                object_serializer.save()
+            with transaction.atomic():  # 开启事务
+                # 获取 PageList 实例
+                page_list = PageList.objects.get(id=pk)
 
-                # 更新 ObjectField
-                object_fields_data = request.data.get("object_fields", [])
-                for object_field_data in object_fields_data:
-                    object_field = ObjectField.objects.get(id=object_field_data["id"])
-                    object_field_serializer = ObjectFieldSerializer(
-                        object_field, data=object_field_data, partial=True
-                    )
-                    if object_field_serializer.is_valid():
-                        object_field_serializer.save()
-                    else:
-                        return Response(
-                            object_field_serializer.errors,
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-            else:
-                return Response(
-                    object_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                # 更新 PageList
+                page_list_data = request.data.get("page_list", {})
+                page_list_serializer = PageListSerializer(
+                    page_list, data=page_list_data, partial=True
                 )
-
-            # 更新 PageList 和 PageListField
-            page_list = PageList.objects.get(id=pk)
-            page_list_serializer = PageListSerializer(
-                page_list, data=request.data.get("page_list", {}), partial=True
-            )
-            if page_list_serializer.is_valid():
-                page_list_serializer.save()
+                if page_list_serializer.is_valid():
+                    page_list_serializer.save()
+                else:
+                    return Response(
+                        page_list_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                    )
 
                 # 更新 PageListField
-                fields_data = request.data.get("fields", [])
-                for field_data in fields_data:
-                    page_list_field = PageListField.objects.get(id=field_data["id"])
+                page_list_fields = PageListField.objects.filter(page_list=page_list)
+                page_list_fields_data = request.data.get("page_list_fields", [])
+                for page_list_field, page_list_field_data in zip(
+                    page_list_fields, page_list_fields_data
+                ):
                     page_list_field_serializer = PageListFieldSerializer(
-                        page_list_field, data=field_data, partial=True
+                        page_list_field, data=page_list_field_data, partial=True
                     )
                     if page_list_field_serializer.is_valid():
                         page_list_field_serializer.save()
@@ -210,23 +192,65 @@ class AccountViewSet(ModelViewSet):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
-                # 更新 PageLayout 和 PageLayoutField
+                    # 通过 PageListField 获取 ObjectField
+                    object_field = page_list_field.object_field
+
+                    # 更新 ObjectField
+                    object_field_data = request.data.get("object_field", {})
+                    if object_field_data:
+                        object_field_serializer = ObjectFieldSerializer(
+                            object_field, data=object_field_data, partial=True
+                        )
+                        if object_field_serializer.is_valid():
+                            object_field_serializer.save()
+                        else:
+                            return Response(
+                                object_field_serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                        # 通过 ObjectField 获取 Object
+                        object_instance = object_field.object
+
+                        # 更新 Object
+                        object_data = request.data.get("object", {})
+                        if object_data:
+                            object_serializer = ObjectSerializer(
+                                object_instance, data=object_data, partial=True
+                            )
+                            if object_serializer.is_valid():
+                                object_serializer.save()
+                            else:
+                                return Response(
+                                    object_serializer.errors,
+                                    status=status.HTTP_400_BAD_REQUEST,
+                                )
+
+                # 更新 PageLayout
                 page_layout_data = request.data.get("page_layout", {})
-                page_layout_instance = PageLayout.objects.get(page_list=page_list)
-                page_layout_serializer = PageLayoutSerializer(
-                    page_layout_instance, data=page_layout_data, partial=True
-                )
-                if page_layout_serializer.is_valid():
-                    page_layout_serializer.save()
+                if page_layout_data:
+                    page_layout_instance = PageLayout.objects.get(page_list=page_list)
+                    page_layout_serializer = PageLayoutSerializer(
+                        page_layout_instance, data=page_layout_data, partial=True
+                    )
+                    if page_layout_serializer.is_valid():
+                        page_layout_serializer.save()
+                    else:
+                        return Response(
+                            page_layout_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
                     # 更新 PageLayoutField
+                    page_layout_fields = PageLayoutField.objects.filter(
+                        page_layout=page_layout_instance
+                    )
                     page_layout_fields_data = request.data.get("page_layout_fields", [])
-                    for layout_field_data in page_layout_fields_data:
-                        page_layout_field = PageLayoutField.objects.get(
-                            id=layout_field_data["id"]
-                        )
+                    for page_layout_field, page_layout_field_data in zip(
+                        page_layout_fields, page_layout_fields_data
+                    ):
                         page_layout_field_serializer = PageLayoutFieldSerializer(
-                            page_layout_field, data=layout_field_data, partial=True
+                            page_layout_field, data=page_layout_field_data, partial=True
                         )
                         if page_layout_field_serializer.is_valid():
                             page_layout_field_serializer.save()
@@ -235,13 +259,8 @@ class AccountViewSet(ModelViewSet):
                                 page_layout_field_serializer.errors,
                                 status=status.HTTP_400_BAD_REQUEST,
                             )
-                else:
-                    return Response(
-                        page_layout_serializer.errors,
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
 
-            return Response(page_list_serializer.data)
+                return Response(page_list_serializer.data)
         except PageList.DoesNotExist:
             return Response({"error": "账户不存在"}, status=status.HTTP_404_NOT_FOUND)
 
