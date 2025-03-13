@@ -76,7 +76,7 @@ class AccountViewSet(ModelViewSet):
                 {
                     "page_list": serialized_page_list,
                     "page_list_fields": serialized_page_list_fields,
-                    "page_layouts": serialized_page_layouts,
+                    "page_layout": serialized_page_layouts,
                     "page_layout_fields": serialized_page_layout_fields,
                     "object": serialized_objects,
                     "object_fields": serialized_object_fields,
@@ -209,7 +209,7 @@ class AccountViewSet(ModelViewSet):
                     object_field = page_list_field.object_field
 
                     # 更新 ObjectField
-                    object_field_data = request.data.get("object_field", {})
+                    object_field_data = request.data.get("object_fields", {})
                     if object_field_data:
                         object_field_serializer = ObjectFieldSerializer(
                             object_field, data=object_field_data, partial=True
