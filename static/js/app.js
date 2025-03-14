@@ -14,7 +14,13 @@ const AccountList = {
       <el-skeleton v-if="loading" :rows="6" animated />
       <!-- 账户列表 -->
       <el-table v-else :data="filteredAccounts" style="width: 100%">
-        <el-table-column prop="name" label="名称" />
+        <el-table-column
+          prop="name"
+          label="名称"
+          sortable
+          :sort-orders="['ascending', 'descending']"
+          @sort-change="handleSortChange"
+        />
         <el-table-column prop="label" label="标签" />
         <el-table-column prop="deleted" label="状态">
           <template #default="{ row }">
@@ -25,7 +31,7 @@ const AccountList = {
         </el-table-column>
         <el-table-column label="操作">
           <template #default="{ row }">
-            <el-button type="primary" @click="viewDetails(row.id)">查看详情</el-button>
+            <el-button type="primary" @click="viewDetails(row.id)">详情</el-button>
             <el-button type="warning" @click="editAccount(row.id)">编辑</el-button>
             <el-button type="danger" @click="deleteAccount(row.id)">删除</el-button>
           </template>
@@ -76,6 +82,7 @@ const AccountList = {
             search: this.searchQuery,
             page: this.currentPage,
             page_size: this.pageSize,
+            ordering: this.sortOrder === 'asc' ? this.sortField : `-${this.sortField}`,
           },
         });
         this.accounts = response.data.results;
@@ -96,10 +103,28 @@ const AccountList = {
     // 删除账户
     async deleteAccount(accountId) {
       try {
-        await axios.delete(`http://127.0.0.1:8000/account/accounts/${accountId}/`);
-        this.fetchAccounts(); // 重新加载账户列表
+        const response = await axios.delete(`http://127.0.0.1:8000/account/accounts/${accountId}/`);
+        if (response.status === 204) {
+          this.$message.success("删除成功！");
+          this.fetchAccounts(); // 重新加载账户列表
+        }
       } catch (error) {
         console.error('删除账户失败', error);
+        if (error.response) {
+          // 根据后端返回的状态码显示不同的错误消息
+          switch (error.response.status) {
+            case 404:
+              this.$message.error("账户不存在！");
+              break;
+            case 500:
+              this.$message.error("服务器错误，请重试！");
+              break;
+            default:
+              this.$message.error("删除失败，请重试！");
+          }
+        } else {
+          this.$message.error("网络错误，请检查连接！");
+        }
       }
     },
     // 创建账户
@@ -110,6 +135,13 @@ const AccountList = {
     handlePageChange(page) {
       this.currentPage = page;
       this.fetchAccounts();
+    },
+    handleSortChange({ column, prop, order }) {
+      if (prop === 'name') {
+        this.sortField = prop;
+        this.sortOrder = order === 'ascending' ? 'asc' : 'desc';
+        this.fetchAccounts();
+      }
     },
   },
 };
@@ -189,6 +221,20 @@ const RetrieveAccount = {
         this.pageLayoutFields = response.data.page_layout_fields;
       } catch (error) {
         console.error('获取数据失败', error);
+        if (error.response) {
+          switch (error.response.status) {
+            case 404:
+              this.$message.error("账户不存在！");
+              break;
+            case 500:
+              this.$message.error("服务器错误，请重试！");
+              break;
+            default:
+              this.$message.error("获取数据失败，请重试！");
+          }
+        } else {
+          this.$message.error("网络错误，请检查连接！");
+        }
       }
       this.loading = false;
     },
@@ -207,174 +253,225 @@ const CreateAccount = {
         <!-- Object 表单 -->
         <el-card style="margin-bottom: 20px;">
           <h2>Object</h2>
-          <el-form-item label="Name" required>
-            <el-input v-model="formData.object.name" />
-          </el-form-item>
-          <el-form-item label="Label">
-            <el-input v-model="formData.object.label" />
-          </el-form-item>
-          <el-form-item label="Table Name" required>
-            <el-input v-model="formData.object.table_name" />
-          </el-form-item>
-          <el-form-item label="Deleted">
-            <el-input v-model="formData.object.deleted" />
-          </el-form-item>
+          <el-table :data="formData.object" border>
+            <el-table-column prop="name" label="Name">
+              <template #default="scope">
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="label" label="Label">
+              <template #default="scope">
+                <el-input v-model="scope.row.label" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="table_name" label="Table Name">
+              <template #default="scope">
+                <el-input v-model="scope.row.table_name" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="deleted" label="Deleted">
+              <template #default="scope">
+                <el-switch 
+                  v-model="scope.row.deleted"
+                  active-value="1"
+                  inactive-value="0"
+                />
+              </template>
+            </el-table-column>
+          </el-table>
         </el-card>
 
         <!-- ObjectField 表单 -->
         <el-card style="margin-bottom: 20px;">
           <h2>Object Field</h2>
-          <el-form-item label="Name" required>
-            <el-input v-model="formData.objectFields[0].name" />
-          </el-form-item>
-          <el-form-item label="Type" required>
-            <el-input v-model="formData.objectFields[0].type" />
-          </el-form-item>
-          <el-form-item label="Deleted">
-            <el-input v-model="formData.objectFields[0].deleted" />
-          </el-form-item>
+          <el-table :data="formData.objectFields" border>
+            <el-table-column prop="name" label="Name">
+              <template #default="scope">
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="type" label="Type">
+              <template #default="scope">
+                <el-select v-model="scope.row.type">
+                  <el-option label="Text" value="text" />
+                  <el-option label="String" value="string" />
+                  <el-option label="Number" value="number" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="Deleted">
+              <template #default="scope">
+                <el-switch 
+                  v-model="scope.row.deleted"
+                  active-value="1"
+                  inactive-value="0"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120">
+              <template #default="scope">
+                <el-button @click="removeRow('objectFields', scope.$index)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-button @click="addRow('objectFields')" style="margin-top:10px">+ 新增字段</el-button>
         </el-card>
 
         <!-- PageList 表单 -->
         <el-card style="margin-bottom: 20px;">
           <h2>Page List</h2>
-          <el-form-item label="Name" required>
-            <el-input v-model="formData.pageList.name" />
-          </el-form-item>
-          <el-form-item label="Label">
-            <el-input v-model="formData.pageList.label" />
-          </el-form-item>
-          <el-form-item label="Deleted">
-            <el-input v-model="formData.pageList.deleted" />
-          </el-form-item>
+          <el-table :data="[formData.pageList]" border>
+            <el-table-column prop="name" label="Name">
+              <template #default="scope">
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="label" label="Label">
+              <template #default="scope">
+                <el-input v-model="scope.row.label" />
+              </template>
+            </el-table-column>
+            <el-table-column label="Deleted">
+              <template #default="scope">
+                <el-switch 
+                  v-model="scope.row.deleted"
+                  active-value="1"
+                  inactive-value="0"
+                />
+              </template>
+            </el-table-column>
+          </el-table>
         </el-card>
 
         <!-- PageListField 表单 -->
         <el-card style="margin-bottom: 20px;">
           <h2>Page List Field</h2>
-          <el-form-item label="Name" required>
-            <el-input v-model="formData.pageListFields[0].name" />
-          </el-form-item>
-          <el-form-item label="Hidden">
-            <el-input v-model="formData.pageListFields[0].hidden" />
-          </el-form-item>
-          <el-form-item label="Type" required>
-            <el-input v-model="formData.pageListFields[0].type" />
-          </el-form-item>
-          <el-form-item label="Deleted">
-            <el-input v-model="formData.pageListFields[0].deleted" />
-          </el-form-item>
+          <el-table :data="formData.pageListFields" border>
+            <el-table-column prop="name" label="Name">
+              <template #default="scope">
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Hidden">
+              <template #default="scope">
+                <el-switch 
+                  v-model="scope.row.hidden"
+                  active-value="1"
+                  inactive-value="0"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="type" label="Type">
+              <template #default="scope">
+                <el-select v-model="scope.row.type">
+                  <el-option label="Text" value="text" />
+                  <el-option label="String" value="string" />
+                  <el-option label="Number" value="number" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120">
+              <template #default="scope">
+                <el-button @click="removeRow('pageListFields', scope.$index)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-button @click="addRow('pageListFields')" style="margin-top:10px">+ 新增字段</el-button>
         </el-card>
 
         <!-- PageLayout 表单 -->
         <el-card style="margin-bottom: 20px;">
           <h2>Page Layout</h2>
-          <el-form-item label="Name" required>
-            <el-input v-model="formData.pageLayout.name" />
-          </el-form-item>
-          <el-form-item label="Deleted">
-            <el-input v-model="formData.pageLayout.deleted" />
-          </el-form-item>
+          <el-table :data="formData.pageLayout" border>
+            <el-table-column prop="name" label="Name">
+              <template #default="scope">
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Deleted">
+              <template #default="scope">
+                <el-switch 
+                  v-model="scope.row.deleted"
+                  active-value="1"
+                  inactive-value="0"
+                />
+              </template>
+            </el-table-column>
+          </el-table>
         </el-card>
 
         <!-- PageLayoutField 表单 -->
         <el-card style="margin-bottom: 20px;">
           <h2>Page Layout Field</h2>
-          <el-form-item label="Name" required>
-            <el-input v-model="formData.pageLayoutFields[0].name" />
-          </el-form-item>
-          <el-form-item label="Label">
-            <el-input v-model="formData.pageLayoutFields[0].label" />
-          </el-form-item>
-          <el-form-item label="Type" required>
-            <el-input v-model="formData.pageLayoutFields[0].type" />
-          </el-form-item>
-          <el-form-item label="Deleted">
-            <el-input v-model="formData.pageLayoutFields[0].deleted" />
-          </el-form-item>
+          <el-table :data="formData.pageLayoutFields" border>
+            <el-table-column prop="name" label="Name">
+              <template #default="scope">
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="label" label="Label">
+              <template #default="scope">
+                <el-input v-model="scope.row.label" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="type" label="Type">
+              <template #default="scope">
+                <el-select v-model="scope.row.type">
+                  <el-option label="Text" value="text" />
+                  <el-option label="String" value="string" />
+                  <el-option label="Number" value="number" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120">
+              <template #default="scope">
+                <el-button @click="removeRow('pageLayoutFields', scope.$index)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-button @click="addRow('pageLayoutFields')" style="margin-top:10px">+ 新增字段</el-button>
         </el-card>
 
         <el-button type="primary" @click="submitForm">提交</el-button>
+        <el-button @click="goBack">返回</el-button>
       </el-form>
     </div>
   `,
   data() {
     return {
       formData: {
-        object: {
-          name: "",
-          label: "",
-          table_name: "",
-          deleted: "0",
-        },
-        objectFields:
-        {
-          name: "",
-          type: "",
-          deleted: "0",
-        },
-        pageList: {
-          name: "",
-          label: "",
-          deleted: "0",
-        },
-        pageListFields: [
-          {
-            name: "",
-            hidden: "0",
-            type: "",
-            deleted: "0",
-          },
-        ],
-        pageLayout: {
-          name: "",
-          deleted: "0",
-        },
-        pageLayoutFields: [
+        object: [
           {
             name: "",
             label: "",
-            type: "",
+            table_name: "",
             deleted: "0",
           },
         ],
-      },
-    };
-  },
-  methods: {
-    async submitForm() {
-      try {
-        const requestData = {
-          object: this.formData.object,
-          object_fields: this.formData.objectFields,
-          page_list: this.formData.pageList,
-          page_list_fields: this.formData.pageListFields,
-          page_layout: this.formData.pageLayout,
-          page_layout_fields: this.formData.pageLayoutFields,
-        };
-        const response = await axios.post('http://127.0.0.1:8000/account/accounts/', requestData);
-        if (response.status === 201) {
-          this.$message.success("创建成功！");
-          this.$router.push("/"); // 返回账户列表
-          this.resetForm(); // 清空表单
-        }
-      } catch (error) {
-        console.error("创建失败:", error);
-        if (error.response) {
-          this.$message.error(`创建失败: ${error.response.data}`);
-        } else {
-          this.$message.error("创建失败，请检查网络连接或服务器状态。");
-        }
-      }
-    },
-    resetForm() {
-      this.formData = {
-        object: {
-          name: "",
-          label: "",
-          table_name: "",
-          deleted: "0",
-        },
         objectFields: [
           {
             name: "",
@@ -395,10 +492,109 @@ const CreateAccount = {
             deleted: "0",
           },
         ],
-        pageLayout: {
+        pageLayout: [
+          {
+            name: "",
+            deleted: "0",
+          },
+        ],
+        pageLayoutFields: [
+          {
+            name: "",
+            label: "",
+            type: "",
+            deleted: "0",
+          },
+        ],
+      },
+    };
+  },
+  methods: {
+    addRow(tableType) {
+      const baseData = {
+        objectFields: { name: '', type: '', deleted: '0' },
+        pageListFields: { name: '', hidden: '0', type: '' },
+        pageLayout: { name: '', deleted: '0' },
+        pageLayoutFields: { name: '', label: '', type: '', deleted: '0' }
+      }
+      this.formData[tableType].push({ ...baseData[tableType] })
+    },
+    removeRow(tableType, index) {
+      this.formData[tableType].splice(index, 1)
+    },
+    goBack() {
+      this.$router.go(-1);
+    },
+    async submitForm() {
+      try {
+        const requestData = {
+          object: this.formData.object || [{ name: "", label: "", table_name: "", deleted: "0" }],
+          object_fields: this.formData.objectFields || [{ name: "", type: "", deleted: "0" }],
+          page_list: this.formData.pageList || { name: "", label: "", deleted: "0" },
+          page_list_fields: this.formData.pageListFields || [{ name: "", hidden: "0", type: "", deleted: "0" }],
+          page_layout: this.formData.pageLayout || [{ name: "", deleted: "0" }],
+          page_layout_fields: this.formData.pageLayoutFields || [{ name: "", label: "", type: "", deleted: "0" }],
+        };
+        const response = await axios.post('http://127.0.0.1:8000/account/accounts/', requestData);
+        if (response.status === 201) {
+          this.$message.success("创建成功！");
+          this.$router.push("/"); // 返回账户列表
+          this.resetForm(); // 清空表单
+        }
+      } catch (error) {
+        console.error("创建失败:", error);
+        if (error.response) {
+          switch (error.response.status) {
+            case 404:
+              this.$message.error("账户不存在！");
+              break;
+            case 500:
+              this.$message.error("服务器错误，请重试！");
+              break;
+            default:
+              this.$message.error("创建失败，请重试！");
+          }
+        } else {
+          this.$message.error("网络错误，请检查连接！");
+        }
+      }
+    },
+    resetForm() {
+      this.formData = {
+        object: [
+          {
+            name: "",
+            label: "",
+            table_name: "",
+            deleted: "0",
+          },
+        ],
+        objectFields: [
+          {
+            name: "",
+            type: "",
+            deleted: "0",
+          },
+        ],
+        pageList: {
           name: "",
+          label: "",
           deleted: "0",
         },
+        pageListFields: [
+          {
+            name: "",
+            hidden: "0",
+            type: "",
+            deleted: "0",
+          },
+        ],
+        pageLayout: [
+          {
+            name: "",
+            deleted: "0",
+          },
+        ],
         pageLayoutFields: [
           {
             name: "",
@@ -423,7 +619,11 @@ const UpdateAccount = {
         <el-table :data="formData.object" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input v-model="scope.row.name" />
+              <el-input
+              v-model="scope.row.name"
+              @change="checkName(scope.row)"
+              />
+              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
             </template>
           </el-table-column>
           <el-table-column prop="label" label="Label">
@@ -445,11 +645,6 @@ const UpdateAccount = {
               />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button @click="removeRow('object', scope.$index)">删除</el-button>
-            </template>
-          </el-table-column>
         </el-table>
       </el-card>
 
@@ -459,7 +654,11 @@ const UpdateAccount = {
         <el-table :data="formData.objectFields" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input v-model="scope.row.name" />
+              <el-input
+              v-model="scope.row.name"
+              @change="checkName(scope.row)"
+              />
+              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
             </template>
           </el-table-column>
           <el-table-column prop="type" label="Type">
@@ -480,13 +679,7 @@ const UpdateAccount = {
               />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button @click="removeRow('objectFields', scope.$index)">删除</el-button>
-            </template>
-          </el-table-column>
         </el-table>
-        <el-button @click="addRow('objectFields')" style="margin-top:10px">+ 新增字段</el-button>
       </el-card>
 
       <!-- PageList 可编辑表格 -->
@@ -495,7 +688,11 @@ const UpdateAccount = {
         <el-table :data="[formData.pageList]" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input v-model="scope.row.name" />
+              <el-input
+              v-model="scope.row.name"
+              @change="checkName(scope.row)"
+              />
+              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
             </template>
           </el-table-column>
           <el-table-column prop="label" label="Label">
@@ -512,11 +709,6 @@ const UpdateAccount = {
               />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button @click="removeRow('pageList', scope.$index)">删除</el-button>
-            </template>
-          </el-table-column>
         </el-table>
       </el-card>
 
@@ -526,7 +718,11 @@ const UpdateAccount = {
         <el-table :data="formData.pageListFields" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input v-model="scope.row.name" />
+              <el-input
+              v-model="scope.row.name"
+              @change="checkName(scope.row)"
+              />
+              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
             </template>
           </el-table-column>
           <el-table-column label="Hidden">
@@ -547,13 +743,7 @@ const UpdateAccount = {
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button @click="removeRow('pageListFields', scope.$index)">删除</el-button>
-            </template>
-          </el-table-column>
         </el-table>
-        <el-button @click="addRow('pageListFields')" style="margin-top:10px">+ 新增字段</el-button>
       </el-card>
 
       <!-- PageLayout 可编辑表格 -->
@@ -562,7 +752,11 @@ const UpdateAccount = {
         <el-table :data="formData.pageLayout" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input v-model="scope.row.name" />
+              <el-input
+              v-model="scope.row.name"
+              @change="checkName(scope.row)"
+              />
+              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
             </template>
           </el-table-column>
           <el-table-column label="Deleted">
@@ -574,13 +768,7 @@ const UpdateAccount = {
               />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button @click="removeRow('pageLayout', scope.$index)">删除</el-button>
-            </template>
-          </el-table-column>
         </el-table>
-        <el-button @click="addRow('pageLayout')" style="margin-top:10px">+ 新增布局</el-button>
       </el-card>
 
       <!-- PageLayoutField 可编辑表格 -->
@@ -589,7 +777,11 @@ const UpdateAccount = {
         <el-table :data="formData.pageLayoutFields" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input v-model="scope.row.name" />
+              <el-input
+              v-model="scope.row.name"
+              @change="checkName(scope.row)"
+              />
+              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
             </template>
           </el-table-column>
           <el-table-column prop="label" label="Label">
@@ -606,32 +798,31 @@ const UpdateAccount = {
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button @click="removeRow('pageLayoutFields', scope.$index)">删除</el-button>
-            </template>
-          </el-table-column>
         </el-table>
-        <el-button @click="addRow('pageLayoutFields')" style="margin-top:10px">+ 新增字段</el-button>
       </el-card>
 
-      <el-button type="primary" @click="submitForm" style="margin-top:20px">全局保存</el-button>
+      <el-button type="primary" @click="submitForm" style="margin-top:20px">保存</el-button>
+      <el-button @click="goBack" style="margin-top:20px">返回</el-button>
     </div>
   `,
   data() {
     return {
       formData: {
-        object: {
-          name: "",
-          label: "",
-          table_name: "",
-          deleted: "0",
-        },
-        objectFields: {
-          name: "",
-          type: "",
-          deleted: "0",
-        },
+        object: [
+          {
+            name: "",
+            label: "",
+            table_name: "",
+            deleted: "0",
+          },
+        ],
+        objectFields: [
+          {
+            name: "",
+            type: "",
+            deleted: "0",
+          },
+        ],
         pageList: {
           name: "",
           label: "",
@@ -645,10 +836,12 @@ const UpdateAccount = {
             deleted: "0",
           },
         ],
-        pageLayout: {
-          name: "",
-          deleted: "0",
-        },
+        pageLayout: [
+          {
+            name: "",
+            deleted: "0",
+          },
+        ],
         pageLayoutFields: [
           {
             name: "",
@@ -658,103 +851,124 @@ const UpdateAccount = {
           },
         ],
       },
-      loading: true, // 加载状态
+      loading: true,
     };
   },
   created() {
     this.fetchData();
   },
   methods: {
-    // 通用行操作方法
-    saveRow(tableType, row) {
-      console.log('保存:', tableType, row)
-      // 此处调用API保存数据[9](@ref)
+    // 返回上一页
+    goBack() {
+      this.$router.go(-1);
     },
+    // // 通用行操作方法
+    // saveRow(tableType, row) {
+    //   console.log('保存:', tableType, row)
+    //   // 此处调用API保存数据[9](@ref)
+    // },
     removeRow(tableType, index) {
       this.formData[tableType].splice(index, 1)
     },
-    addRow(tableType) {
-      const baseData = {
-        objectFields: { name: '', type: 'string', deleted: '0' },
-        pageListFields: { name: '', hidden: '0', type: 'text' },
-        pageLayout: { name: '', deleted: '0' },
-        pageLayoutFields: { name: '', label: '', type: 'input', deleted: '0' }
-      }
-      this.formData[tableType].push({ ...baseData[tableType] })
-    },
-    // 递归移除所有 id 字段
-    removeIds(data) {
-      if (data === null || data === undefined) {
-        return data;
-      }
+    // addRow(tableType) {
+    //   const baseData = {
+    //     objectFields: { name: '', type: 'string', deleted: '0' },
+    //     pageListFields: { name: '', hidden: '0', type: 'text' },
+    //     pageLayout: { name: '', deleted: '0' },
+    //     pageLayoutFields: { name: '', label: '', type: 'input', deleted: '0' }
+    //   }
+    //   this.formData[tableType].push({ ...baseData[tableType] })
+    // },
+    // // 递归移除所有 id 字段
+    // removeIds(data) {
+    //   if (data === null || data === undefined) {
+    //     return data;
+    //   }
 
-      // 处理数组：递归处理每个元素
-      if (Array.isArray(data)) {
-        return data.map(item => this.removeIds(item));
-      }
+    //   // 处理数组：递归处理每个元素
+    //   if (Array.isArray(data)) {
+    //     return data.map(item => this.removeIds(item));
+    //   }
 
-      // 处理对象：移除指定字段
-      if (typeof data === 'object') {
-        return Object.keys(data).reduce((acc, key) => {
-          // 需要删除的字段列表
-          const forbiddenKeys = [
-            'id',           // 所有主键ID
-            'object',        // Object关联对象
-            'object_field',  // ObjectField关联对象
-            'page_list',     // PageList关联对象
-            'page_layout'    // PageLayout关联对象
-          ];
+    //   // 处理对象：移除指定字段
+    //   if (typeof data === 'object') {
+    //     return Object.keys(data).reduce((acc, key) => {
+    //       // 需要删除的字段列表
+    //       const forbiddenKeys = [
+    //         'id',           // 所有主键ID
+    //         'object',        // Object关联对象
+    //         'object_field',  // ObjectField关联对象
+    //         'page_list',     // PageList关联对象
+    //         'page_layout'    // PageLayout关联对象
+    //       ];
 
-          // 仅保留不在黑名单中的字段
-          if (!forbiddenKeys.includes(key)) {
-            acc[key] = this.removeIds(data[key]);
-          }
-          return acc;
-        }, {});
-      }
+    //       // 仅保留不在黑名单中的字段
+    //       if (!forbiddenKeys.includes(key)) {
+    //         acc[key] = this.removeIds(data[key]);
+    //       }
+    //       return acc;
+    //     }, {});
+    //   }
 
-      // 基本类型直接返回
-      return data;
-    },
+    //   // 基本类型直接返回
+    //   return data;
+    // },
     // 获取数据
     async fetchData() {
       try {
-        const accountId = this.$route.params.id; // 从路由中获取 ID
+        const accountId = this.$route.params.id;
         const response = await axios.get(`http://127.0.0.1:8000/account/accounts/${accountId}/`);
-        // console.log(response.data); // 打印返回的数据
-        console.log("object:", response.data.object);
-        console.log("page_layout:", response.data.page_layout);
+        // console.log(response.data);
+        // console.log("object:", response.data.object);
+        // console.log("page_layout:", response.data.page_layout);
         this.formData = {
-          object: response.data.object || { name: "", label: "", table_name: "", deleted: "0" },
-          objectFields: response.data.object_fields || { name: "", type: "", deleted: "0" },
+          object: response.data.object || [{ name: "", label: "", table_name: "", deleted: "0" }],
+          objectFields: response.data.object_fields || [{ name: "", type: "", deleted: "0" }],
           pageList: response.data.page_list || { name: "", label: "", deleted: "0" },
           pageListFields: response.data.page_list_fields || [{ name: "", hidden: "0", type: "", deleted: "0" }],
-          pageLayout: response.data.page_layout || { name: "", deleted: "0" },
+          pageLayout: response.data.page_layout || [{ name: "", deleted: "0" }],
           pageLayoutFields: response.data.page_layout_fields || [{ name: "", label: "", type: "", deleted: "0" }],
         };
         this.loading = false;// 填充表单数据
       } catch (error) {
         console.error("获取数据失败:", error);
         if (error.response) {
-          this.$message.error(`获取数据失败: ${error.response.data}`);
+          switch (error.response.status) {
+            case 404:
+              this.$message.error("账户不存在！");
+              break;
+            case 500:
+              this.$message.error("服务器错误，请重试！");
+              break;
+            default:
+              this.$message.error("获取数据失败，请重试！");
+          }
         } else {
-          this.$message.error("获取数据失败，请检查网络连接或服务器状态。");
+          this.$message.error("网络错误，请检查连接！");
         }
       }
     },
     // 提交表单
     async submitForm() {
       try {
-        const accountId = this.$route.params.id; // 从路由中获取 ID
+        const accountId = this.$route.params.id;
         // 深拷贝表单数据并移除所有 id
         // console.log('提交数据:', this.formData.object);
+        // const requestData = {
+        //   object: this.removeIds(this.formData.object),
+        //   object_fields: this.removeIds(this.formData.objectFields),
+        //   page_list: this.removeIds(this.formData.pageList),
+        //   page_list_fields: this.removeIds(this.formData.pageListFields),
+        //   page_layout: this.removeIds(this.formData.pageLayout),
+        //   page_layout_fields: this.removeIds(this.formData.pageLayoutFields),
+        // };
         const requestData = {
-          object: this.removeIds(this.formData.object),
-          object_fields: this.removeIds(this.formData.objectFields),
-          page_list: this.removeIds(this.formData.pageList),
-          page_list_fields: this.removeIds(this.formData.pageListFields),
-          page_layout: this.removeIds(this.formData.pageLayout),
-          page_layout_fields: this.removeIds(this.formData.pageLayoutFields),
+          object: this.formData.object,
+          object_fields: this.formData.objectFields,
+          page_list: this.formData.pageList,
+          page_list_fields: this.formData.pageListFields,
+          page_layout: this.formData.pageLayout,
+          page_layout_fields: this.formData.pageLayoutFields,
         };
         // console.log('提交数据:', requestData);
         // console.log('提交数据:', requestData.object);
@@ -763,25 +977,26 @@ const UpdateAccount = {
         // console.log('提交数据:', requestData.page_list_fields);
         // console.log('提交数据:', requestData.page_layout);
         // console.log('提交数据:', requestData.page_layout_fields);
-        // const requestData = {
-        //   object: this.formData.object,
-        //   object_fields: this.formData.objectFields,
-        //   page_list: this.formData.pageList,
-        //   page_list_fields: this.formData.pageListFields,
-        //   page_layout: this.formData.pageLayout,
-        //   page_layout_fields: this.formData.pageLayoutFields,
-        // };
         const response = await axios.put(`http://127.0.0.1:8000/account/accounts/${accountId}/`, requestData);
         if (response.status === 200) {
           this.$message.success("更新成功！");
-          this.$router.push("/"); // 返回账户列表
+          this.$router.push("/");
         }
       } catch (error) {
         console.error("更新失败:", error);
         if (error.response) {
-          this.$message.error(`更新失败: ${error.response.data}`);
+          switch (error.response.status) {
+            case 404:
+              this.$message.error("账户不存在！");
+              break;
+            case 500:
+              this.$message.error("服务器错误，请重试！");
+              break;
+            default:
+              this.$message.error("更新失败，请重试！");
+          }
         } else {
-          this.$message.error("更新失败，请检查网络连接或服务器状态。");
+          this.$message.error("网络错误，请检查连接！");
         }
       }
     },
@@ -790,13 +1005,12 @@ const UpdateAccount = {
 
 const NotFound = { template: '<div>404 Not Found</div>' };
 
-// 使用全局的 Vue Router 创建路由实例
 const router = VueRouter.createRouter({
-  history: VueRouter.createWebHistory(), // 使用 HTML5 历史模式
+  history: VueRouter.createWebHistory(),
   routes: [
     {
       path: '/',
-      component: AccountList, // 初始界面
+      component: AccountList,
     },
     {
       path: '/account/create',
@@ -822,10 +1036,8 @@ const app = Vue.createApp({});
 
 app.use(ElementPlus)
 
-// 使用路由
 app.use(router);
 
-// 错误捕获
 app.config.errorHandler = (err, vm, info) => {
   console.error("捕获到错误:", err, info);
   return false;

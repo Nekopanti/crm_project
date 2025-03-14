@@ -32,6 +32,11 @@ class PageListSerializer(serializers.ModelSerializer):
 
 # PageListField 序列化器
 class PageListFieldSerializer(serializers.ModelSerializer):
+    page_list = serializers.PrimaryKeyRelatedField(queryset=PageList.objects.all())
+    object_field = serializers.PrimaryKeyRelatedField(
+        queryset=ObjectField.objects.all()
+    )
+
     class Meta:
         model = PageListField
         fields = "__all__"
@@ -46,6 +51,11 @@ class PageLayoutSerializer(serializers.ModelSerializer):
 
 # PageLayoutField 序列化器
 class PageLayoutFieldSerializer(serializers.ModelSerializer):
+    page_layout = serializers.PrimaryKeyRelatedField(queryset=PageLayout.objects.all())
+    object_field = serializers.PrimaryKeyRelatedField(
+        queryset=ObjectField.objects.all()
+    )
+
     class Meta:
         model = PageLayoutField
         fields = "__all__"
