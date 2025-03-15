@@ -256,11 +256,14 @@ const CreateAccount = {
           <el-table :data="formData.object" border>
             <el-table-column prop="name" label="Name">
               <template #default="scope">
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+                <div style="display: flex; align-items: center;">
+                  <span style="color: red; margin-right: 5px;">*</span>
+                  <el-input
+                  v-model="scope.row.name"
+                  @change="checkName(scope.row)"
+                  />
+                </div>
+                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
               </template>
             </el-table-column>
             <el-table-column prop="label" label="Label">
@@ -291,11 +294,14 @@ const CreateAccount = {
           <el-table :data="formData.objectFields" border>
             <el-table-column prop="name" label="Name">
               <template #default="scope">
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+                <div style="display: flex; align-items: center;">
+                  <span style="color: red; margin-right: 5px;">*</span>
+                  <el-input
+                  v-model="scope.row.name"
+                  @change="checkName(scope.row)"
+                  />
+                </div>
+                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
               </template>
             </el-table-column>
             <el-table-column prop="type" label="Type">
@@ -331,11 +337,14 @@ const CreateAccount = {
           <el-table :data="[formData.pageList]" border>
             <el-table-column prop="name" label="Name">
               <template #default="scope">
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+                <div style="display: flex; align-items: center;">
+                  <span style="color: red; margin-right: 5px;">*</span>
+                  <el-input
+                  v-model="scope.row.name"
+                  @change="checkName(scope.row)"
+                  />
+                </div>
+                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
               </template>
             </el-table-column>
             <el-table-column prop="label" label="Label">
@@ -361,11 +370,14 @@ const CreateAccount = {
           <el-table :data="formData.pageListFields" border>
             <el-table-column prop="name" label="Name">
               <template #default="scope">
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+                <div style="display: flex; align-items: center;">
+                  <span style="color: red; margin-right: 5px;">*</span>
+                  <el-input
+                  v-model="scope.row.name"
+                  @change="checkName(scope.row)"
+                  />
+                </div>
+                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
               </template>
             </el-table-column>
             <el-table-column label="Hidden">
@@ -401,11 +413,14 @@ const CreateAccount = {
           <el-table :data="formData.pageLayout" border>
             <el-table-column prop="name" label="Name">
               <template #default="scope">
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+                <div style="display: flex; align-items: center;">
+                  <span style="color: red; margin-right: 5px;">*</span>
+                  <el-input
+                  v-model="scope.row.name"
+                  @change="checkName(scope.row)"
+                  />
+                </div>
+                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
               </template>
             </el-table-column>
             <el-table-column label="Deleted">
@@ -426,11 +441,14 @@ const CreateAccount = {
           <el-table :data="formData.pageLayoutFields" border>
             <el-table-column prop="name" label="Name">
               <template #default="scope">
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-                <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+                <div style="display: flex; align-items: center;">
+                  <span style="color: red; margin-right: 5px;">*</span>
+                  <el-input
+                  v-model="scope.row.name"
+                  @change="checkName(scope.row)"
+                  />
+                </div>
+                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
               </template>
             </el-table-column>
             <el-table-column prop="label" label="Label">
@@ -526,6 +544,63 @@ const CreateAccount = {
       this.$router.go(-1);
     },
     async submitForm() {
+      let isValid = true;
+
+      if (!this.formData.pageList.name) {
+        this.formData.pageList.showError = true;
+        isValid = false;
+      } else {
+        this.formData.pageList.showError = false;
+      }
+      this.formData.object.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.objectFields.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.pageListFields.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.pageLayout.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.pageLayoutFields.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      if (!isValid) {
+        this.$message.error("请填写所有必填项！");
+        return;
+      }
       try {
         const requestData = {
           object: this.formData.object || [{ name: "", label: "", table_name: "", deleted: "0" }],
@@ -619,11 +694,14 @@ const UpdateAccount = {
         <el-table :data="formData.object" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input
-              v-model="scope.row.name"
-              @change="checkName(scope.row)"
-              />
-              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              <div style="display: flex; align-items: center;">
+                <span style="color: red; margin-right: 5px;">*</span>
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+              </div>
+              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
             </template>
           </el-table-column>
           <el-table-column prop="label" label="Label">
@@ -654,11 +732,14 @@ const UpdateAccount = {
         <el-table :data="formData.objectFields" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input
-              v-model="scope.row.name"
-              @change="checkName(scope.row)"
-              />
-              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              <div style="display: flex; align-items: center;">
+                <span style="color: red; margin-right: 5px;">*</span>
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+              </div>
+              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
             </template>
           </el-table-column>
           <el-table-column prop="type" label="Type">
@@ -688,11 +769,14 @@ const UpdateAccount = {
         <el-table :data="[formData.pageList]" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input
-              v-model="scope.row.name"
-              @change="checkName(scope.row)"
-              />
-              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              <div style="display: flex; align-items: center;">
+                <span style="color: red; margin-right: 5px;">*</span>
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+              </div>
+              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
             </template>
           </el-table-column>
           <el-table-column prop="label" label="Label">
@@ -718,11 +802,14 @@ const UpdateAccount = {
         <el-table :data="formData.pageListFields" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input
-              v-model="scope.row.name"
-              @change="checkName(scope.row)"
-              />
-              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              <div style="display: flex; align-items: center;">
+                <span style="color: red; margin-right: 5px;">*</span>
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+              </div>
+              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
             </template>
           </el-table-column>
           <el-table-column label="Hidden">
@@ -752,11 +839,14 @@ const UpdateAccount = {
         <el-table :data="formData.pageLayout" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input
-              v-model="scope.row.name"
-              @change="checkName(scope.row)"
-              />
-              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              <div style="display: flex; align-items: center;">
+                <span style="color: red; margin-right: 5px;">*</span>
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+              </div>
+              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
             </template>
           </el-table-column>
           <el-table-column label="Deleted">
@@ -777,11 +867,14 @@ const UpdateAccount = {
         <el-table :data="formData.pageLayoutFields" border>
           <el-table-column prop="name" label="Name">
             <template #default="scope">
-              <el-input
-              v-model="scope.row.name"
-              @change="checkName(scope.row)"
-              />
-              <span v-if="!scope.row.name" style="color: red;">名称不能为空！</span>
+              <div style="display: flex; align-items: center;">
+                <span style="color: red; margin-right: 5px;">*</span>
+                <el-input
+                v-model="scope.row.name"
+                @change="checkName(scope.row)"
+                />
+              </div>
+              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
             </template>
           </el-table-column>
           <el-table-column prop="label" label="Label">
@@ -950,9 +1043,65 @@ const UpdateAccount = {
     },
     // 提交表单
     async submitForm() {
+      let isValid = true;
+
+      if (!this.formData.pageList.name) {
+        this.formData.pageList.showError = true;
+        isValid = false;
+      } else {
+        this.formData.pageList.showError = false;
+      }
+      this.formData.object.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.objectFields.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.pageListFields.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.pageLayout.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      this.formData.pageLayoutFields.forEach(item => {
+        if (!item.name) {
+          item.showError = true;
+          isValid = false;
+        } else {
+          item.showError = false;
+        }
+      });
+
+      if (!isValid) {
+        this.$message.error("请填写所有必填项！");
+        return;
+      }
       try {
         const accountId = this.$route.params.id;
-        // 深拷贝表单数据并移除所有 id
         // console.log('提交数据:', this.formData.object);
         // const requestData = {
         //   object: this.removeIds(this.formData.object),
