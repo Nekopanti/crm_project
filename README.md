@@ -85,9 +85,12 @@ pip install -r requirements.txt
 2. 在 .env 文件中配置数据库连接
 
 ```bash
-DB_NAME=your_db_name
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
+SECRET_KEY=crm_project
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+DB_NAME=crm_db
+DB_USER=root
+DB_PASSWORD=password
 DB_HOST=localhost
 DB_PORT=3306
 ```
