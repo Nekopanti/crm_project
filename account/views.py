@@ -37,7 +37,7 @@ class AccountViewSet(ModelViewSet):
     filter_backends = [SearchFilter, OrderingFilter]  # 支持搜索 & 排序
     search_fields = ["^name"]  # 允许通过name首字母搜索
     ordering_fields = ["id", "name"]  # 允许排序字段
-    ordering = ["name"]  # 默认按 id 排序
+    ordering = ["name"]  # 默认按 name 排序
 
     def retrieve(self, request, pk=None):
         """获取某个账户详情（PageList + PageListField + PageLayout + PageLayoutField）"""
