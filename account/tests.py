@@ -7,6 +7,7 @@ from account.models import (
     ObjectField,
     PageLayoutField,
     PageListField,
+    Account,
 )
 
 
@@ -125,6 +126,17 @@ class TestDataGeneration(TransactionTestCase):
             page_list=self.page_list1,
         )
 
+        # 创建 Account 数据
+        self.account1 = Account.objects.create(
+            object=self.object1,  # 关联到之前创建的 Object
+            data={
+                "account_name": "Dr. Test",
+                "hospital": "test Hospital",
+                "department": "xxxxxtest",
+                "phone": "1234567890",
+            },
+        )
+
     def test_object_count(self):
         # 检查 Object 表中是否有 1 条数据
         self.assertEqual(Object.objects.count(), 1)
@@ -148,3 +160,7 @@ class TestDataGeneration(TransactionTestCase):
     def test_pagelistfield_count(self):
         # 检查 PageListField 表中是否有 3 条数据
         self.assertEqual(PageListField.objects.count(), 3)
+
+    def test_account_count(self):
+        # 检查 Account 表中是否有 3 条数据
+        self.assertEqual(Account.objects.count(), 1)

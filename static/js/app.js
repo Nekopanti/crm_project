@@ -77,7 +77,7 @@ const AccountList = {
     async fetchAccounts() {
       this.loading = true;
       try {
-        const response = await axios.get('http://127.0.0.1:8000/account/accounts/', {
+        const response = await axios.get('http://127.0.0.1:8000/api/main/', {
           params: {
             search: this.searchQuery,
             page: this.currentPage,
@@ -103,7 +103,7 @@ const AccountList = {
     // 删除账户
     async deleteAccount(accountId) {
       try {
-        const response = await axios.delete(`http://127.0.0.1:8000/account/accounts/${accountId}/`);
+        const response = await axios.delete(`http://127.0.0.1:8000/api/main/${accountId}/`);
         if (response.status === 204) {
           this.$message.success("删除成功！");
           this.fetchAccounts(); // 重新加载账户列表
@@ -214,7 +214,7 @@ const RetrieveAccount = {
     async fetchData() {
       try {
         const accountId = this.$route.params.id;
-        const response = await axios.get(`http://127.0.0.1:8000/account/accounts/${accountId}/`);
+        const response = await axios.get(`http://127.0.0.1:8000/api/main/${accountId}/`);
         this.pageList = response.data.page_list;
         this.pageListFields = response.data.page_list_fields;
         this.pageLayouts = response.data.page_layout;
@@ -610,7 +610,7 @@ const CreateAccount = {
           page_layout: this.formData.pageLayout || [{ name: "", deleted: "0" }],
           page_layout_fields: this.formData.pageLayoutFields || [{ name: "", label: "", type: "", deleted: "0" }],
         };
-        const response = await axios.post('http://127.0.0.1:8000/account/accounts/', requestData);
+        const response = await axios.post('http://127.0.0.1:8000/api/main/', requestData);
         if (response.status === 201) {
           this.$message.success("创建成功！");
           this.$router.push("/"); // 返回账户列表
@@ -1010,7 +1010,7 @@ const UpdateAccount = {
     async fetchData() {
       try {
         const accountId = this.$route.params.id;
-        const response = await axios.get(`http://127.0.0.1:8000/account/accounts/${accountId}/`);
+        const response = await axios.get(`http://127.0.0.1:8000/api/main/${accountId}/`);
         // console.log(response.data);
         // console.log("object:", response.data.object);
         // console.log("page_layout:", response.data.page_layout);
@@ -1126,7 +1126,7 @@ const UpdateAccount = {
         // console.log('提交数据:', requestData.page_list_fields);
         // console.log('提交数据:', requestData.page_layout);
         // console.log('提交数据:', requestData.page_layout_fields);
-        const response = await axios.put(`http://127.0.0.1:8000/account/accounts/${accountId}/`, requestData);
+        const response = await axios.put(`http://127.0.0.1:8000/api/main/${accountId}/`, requestData);
         if (response.status === 200) {
           this.$message.success("更新成功！");
           this.$router.push("/");

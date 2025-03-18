@@ -1,7 +1,6 @@
 import os
 import sys
 import django
-import uuid
 
 # 获取当前文件的目录路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +22,7 @@ from account.models import (
     ObjectField,
     PageLayoutField,
     PageListField,
+    Account,
 )
 
 
@@ -129,6 +129,21 @@ class DataInsert:
                     object_field=self.object_field3,
                     page_list=self.page_list1,
                 )
+
+                # 创建 20 条 Account 数据（业务数据）
+                accounts_data = [
+                    {
+                        "account_name": f"Dr. test{i}",
+                        "hospital": f"test Hospital{i}",
+                        "department": f"xxxxxtest{i}",
+                        "phone": f"1234567890xxx{i}",
+                    }
+                    for i in range(1, 21)
+                ]
+
+                for data in accounts_data:
+                    Account.objects.create(object=self.object1, data=data)
+
             print("数据插入成功")
         except Exception as e:
             print(f"Transfer failed: {e}")

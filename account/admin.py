@@ -6,6 +6,7 @@ from .models import (
     PageListField,
     PageLayout,
     PageLayoutField,
+    Account,
 )
 
 
@@ -37,3 +38,8 @@ class PageLayoutAdmin(admin.ModelAdmin):
 @admin.register(PageLayoutField)
 class PageLayoutFieldAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "label", "page_layout_id", "object_field_id", "type")
+
+
+@admin.register(Account)
+class Account(admin.ModelAdmin):
+    list_display = ("id", "object", "data", "created_at", "updated_at")

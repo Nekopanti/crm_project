@@ -1,9 +1,10 @@
+import json
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
-from rest_framework import status
+from rest_framework import status, serializers
 from django.db import transaction
 from .models import (
     Object,
@@ -12,6 +13,7 @@ from .models import (
     PageListField,
     PageLayout,
     PageLayoutField,
+    Account,
 )
 from .serializers import (
     ObjectSerializer,
@@ -20,6 +22,7 @@ from .serializers import (
     PageListFieldSerializer,
     PageLayoutSerializer,
     PageLayoutFieldSerializer,
+    AccountSerializer,
 )
 
 
@@ -30,14 +33,23 @@ class AccountPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class AccountViewSet(ModelViewSet):
-    queryset = PageList.objects.all()
-    serializer_class = PageListSerializer  # 主要序列化器
+class MainViewSet(ModelViewSet):
+    serializer_class = AccountSerializer
     pagination_class = AccountPagination  # 启用分页
     filter_backends = [SearchFilter, OrderingFilter]  # 支持搜索 & 排序
     search_fields = ["^name"]  # 允许通过name首字母搜索
     ordering_fields = ["id", "name"]  # 允许排序字段
     ordering = ["name"]  # 默认按 name 排序
+
+    def list(self, request):
+        """列表页：动态返回业务数据"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+
+        serializer = self._get_dynamic_serializer(queryset.page_list)
+        serialized_data = serializer(page, many=True).data
+
+        return self.get_paginated_response(serialized_data)
 
     def retrieve(self, request, pk=None):
         """获取某个账户详情（PageList + PageListField + PageLayout + PageLayoutField）"""
@@ -309,6 +321,36 @@ class AccountViewSet(ModelViewSet):
         except PageList.DoesNotExist:
             return Response({"error": "账户不存在"}, status=status.HTTP_404_NOT_FOUND)
 
+    def _get_page_list(self):
+        """获取默认的 PageList"""
+        return PageList.objects.filter(is_default=True).first()
+
+    def filter_data_by_pagelist(data, allowed_fields):
+        """根据 allowed_fields 过滤 data 字段"""
+        return {field: data.get(field) for field in allowed_fields}
+
+    def _get_allowed_fields(self, page_list):
+        """获取允许展示的字段"""
+        return list(
+            PageListField.objects.filter(page_list=page_list, hidden=False).values_list(
+                "object_field__name", flat=True
+            )
+        )
+
+    def _get_dynamic_serializer(self, page_list):
+        """动态生成序列化器"""
+        allowed_fields = self._get_allowed_fields(page_list)  # 获取允许展示的字段
+
+        class DynamicSerializer(serializers.Serializer):
+            def to_representation(self, instance):
+                """重写 to_representation 方法，动态返回字段"""
+                data = parse_data_field(instance.data)
+                return filter_data_by_pagelist(
+                    data, allowed_fields
+                )  # 使用 allowed_fields 过滤字段
+
+        return DynamicSerializer
+
 
 class ObjectViewSet(ModelViewSet):
     queryset = Object.objects.all()
@@ -338,3 +380,21 @@ class PageLayoutViewSet(ModelViewSet):
 class PageLayoutFieldViewSet(ModelViewSet):
     queryset = PageLayoutField.objects.all()
     serializer_class = PageLayoutFieldSerializer
+
+
+class AccountViewSet(ModelViewSet):
+    queryset = Account.objects.all()
+    serializer_class = AccountSerializer
+
+
+def parse_data_field(data):
+    """解析 data 字段"""
+    if isinstance(data, str):
+        return json.loads(data)
+    return data
+
+
+def filter_data_by_pagelist(data, page_list):
+    """根据 PageList 配置过滤 data 字段"""
+    allowed_fields = self._get_allowed_fields(page_list)  # 获取允许展示的字段
+    return {field: data.get(field) for field in allowed_fields}

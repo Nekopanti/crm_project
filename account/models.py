@@ -86,3 +86,22 @@ class PageLayoutField(models.Model):
 
     class Meta:
         db_table = "page_layout_fields"
+
+
+class Account(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    object = models.ForeignKey(Object, on_delete=models.CASCADE)
+    # 动态数据存储：业务数据以 JSON 格式存储
+    data = models.JSONField(default=dict, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted = models.CharField(max_length=1, default="0", db_default="0")
+
+    class Meta:
+        db_table = "t_account"
+        indexes = [
+            models.Index(fields=["object"]),
+        ]
+
+    def __str__(self):
+        return f"{self.object.name} - {self.created_at.strftime('%Y-%m-%d %H:%M:%S')}"

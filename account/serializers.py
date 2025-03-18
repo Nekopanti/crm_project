@@ -6,6 +6,7 @@ from .models import (
     PageListField,
     PageLayout,
     PageLayoutField,
+    Account,
 )
 
 
@@ -58,4 +59,11 @@ class PageLayoutFieldSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PageLayoutField
+        fields = "__all__"
+
+
+# Account 序列化器
+class AccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Account
         fields = "__all__"
