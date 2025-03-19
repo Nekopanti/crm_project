@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
+    get_all_objects,
     MainViewSet,
     ObjectViewSet,
     ObjectFieldViewSet,
@@ -24,4 +25,5 @@ router.register(r"accounts", AccountViewSet)
 
 urlpatterns = [
     path("", include(router.urls)),  # 让 DRF 自动处理所有路由
+    path("all-objects/", get_all_objects, name="get_all_objects"),
 ]
