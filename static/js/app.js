@@ -1,104 +1,186 @@
 // Vue.js 组件
 const AccountList = {
   template: `
-    <div>
-      <h1>账户列表</h1>
-      <!-- 搜索框 -->
-      <el-input
-        v-model="searchQuery"
-        placeholder="搜索账户名称"
-        @input="fetchAccounts"
-        style="margin-bottom: 20px;"
-      />
-      <!-- 加载状态 -->
-      <el-skeleton v-if="loading" :rows="6" animated />
-      <!-- 账户列表 -->
-      <el-table v-else :data="filteredAccounts" style="width: 100%">
-        <el-table-column
-          prop="name"
-          label="名称"
-          sortable
-          :sort-orders="['ascending', 'descending']"
-          @sort-change="handleSortChange"
+    <div style="padding: 20px;">
+
+      <!-- 对象选择页面 -->
+      <div v-if="!showAccountList">
+        <h1>选择对象</h1>
+        <el-select 
+          v-model="selectedObjectId" 
+          placeholder="请选择对象" 
+          style="width: 100%; margin-bottom: 20px;"
+        >
+          <el-option
+            v-for="object in objects"
+            :key="object.id"
+            :label="object.label"
+            :value="object.id"
+          />
+        </el-select>
+
+        <el-button type="success" @click="goToAccountList" :disabled="!selectedObjectId">
+          进入列表
+        </el-button>
+      </div>
+
+      <!-- 账户列表页面 -->
+      <div v-else>
+        <h1>{{ pageListTitle }}</h1>
+
+        <!-- 搜索框 -->
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜索账户名称"
+          @input="debouncedFilterAccounts"
+          style="margin-bottom: 20px;"
         />
-        <el-table-column prop="label" label="标签" />
-        <el-table-column prop="deleted" label="状态">
-          <template #default="{ row }">
-            <el-tag :type="row.deleted === '0' ? 'success' : 'danger'">
-              {{ row.deleted === '0' ? '启用' : '已删除' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作">
-          <template #default="{ row }">
-            <el-button type="primary" @click="viewDetails(row.id)">详情</el-button>
-            <el-button type="warning" @click="editAccount(row.id)">编辑</el-button>
-            <el-button type="danger" @click="deleteAccount(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <!-- 分页 -->
-      <el-pagination
-        style="margin-top: 20px;"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        :total="totalCount"
-        @current-change="handlePageChange"
-      />
-      <!-- 创建账户按钮 -->
-      <el-button type="success" @click="createAccount" style="margin-top: 20px;">
-        创建账户
-      </el-button>
+
+        <el-skeleton v-if="loading" :rows="6" animated />
+
+        <el-table v-else :data="filteredAccounts" style="width: 100%">
+          <el-table-column
+            v-for="(value, key) in filteredAccounts[0]"
+            :key="key"
+            :prop="key"
+            :label="formatLabel(key)"
+          />
+          <el-table-column label="操作">
+            <template #default="{ row }">
+              <el-button type="primary" @click="viewDetails(row.id)">详情</el-button>
+              <el-button type="warning" @click="editAccount(row.id)">编辑</el-button>
+              <el-button type="danger" @click="deleteAccount(row.id)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <el-pagination
+          style="margin-top: 20px;"
+          :current-page="currentPage"
+          :page-size="pageSize"
+          :total="totalCount"
+          @current-change="handlePageChange"
+        />
+        <!-- 创建账户按钮 -->
+        <el-button type="success" @click="createAccount" style="margin-top: 20px;">
+          创建账户
+        </el-button>
+        <el-button type="primary" @click="showAccountList = false" style="margin-top: 20px;">
+          返回
+          </el-button>
+      </div>
     </div>
   `,
   data() {
     return {
-      accounts: [], // 账户列表
-      searchQuery: '', // 搜索关键字
-      currentPage: 1, // 当前页码
-      pageSize: 20, // 每页显示数量
-      totalCount: 0, // 总记录数
-      loading: true, // 加载状态
+      objects: [],
+      selectedObjectId: '',
+      pageListTitle: '',
+      accounts: [],
+      searchQuery: '',
+      currentPage: 1,
+      pageSize: 20,
+      totalCount: 0,
+      loading: false,
+      sortField: null,
+      sortOrder: 'asc',
+      filteredAccounts: [],
+      showAccountList: false,
     };
   },
-  computed: {
-    // 过滤后的账户列表
-    filteredAccounts() {
-      return this.accounts.filter(account =>
-        account.name.toLowerCase().includes(this.searchQuery.toLowerCase())
-      );
-    },
-  },
   created() {
-    this.fetchAccounts();
+    this.fetchObjects();
+    this.debouncedFilterAccounts = this.debounce(this.filterAccounts, 300);
   },
   methods: {
-    // 获取账户列表
+    async fetchObjects() {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/objects/');
+        this.objects = response.data;
+      } catch (error) {
+        console.error('获取对象失败', error);
+      }
+    },
+    async fetchPageList() {
+      this.loading = true;
+      try {
+        const response = await axios.get(`http://127.0.0.1:8000/api/page-lists/`);
+        this.pageListTitle = response.data[0]?.label || "未配置页面";
+        this.fetchAccounts();
+      } catch (error) {
+        console.error('获取 PageList 名称失败', error);
+      }
+      this.loading = false;
+    },
     async fetchAccounts() {
       this.loading = true;
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/main/', {
           params: {
+            object_id: this.selectedObjectId,
             search: this.searchQuery,
             page: this.currentPage,
             page_size: this.pageSize,
-            ordering: this.sortOrder === 'asc' ? this.sortField : `-${this.sortField}`,
-          },
+          }
         });
+        console.log(response.data);
         this.accounts = response.data.results;
+        this.filteredAccounts = [...this.accounts];
         this.totalCount = response.data.count;
       } catch (error) {
-        console.error('获取账户列表失败', error);
+        console.error('获取账户失败', error);
       }
       this.loading = false;
     },
-    // 查看账户详情
-    viewDetails(accountId) {
-      this.$router.push(`/account/${accountId}`);
+    filterAccounts() {
+      if (!this.searchQuery) {
+        this.filteredAccounts = [...this.accounts];
+      } else {
+        const searchTerm = this.searchQuery.toLowerCase();
+        this.filteredAccounts = this.accounts.filter(account => {
+          return account.account_name.toLowerCase().includes(searchTerm);
+        });
+      }
     },
-    // 编辑账户
+    formatLabel(key) {
+      const labelMap = {
+        account_name: '账户名称',
+        department: '部门',
+        hospital: '医院',
+      };
+      return labelMap[key] || key;  // 默认返回字段名
+    },
+    debounce(func, wait) {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => func.apply(this, args), wait);
+      };
+    },
+    goToAccountList() {
+      if (!this.selectedObjectId) return;
+      this.showAccountList = true;
+      this.fetchPageList();
+    },
+
+    // ✅ 分页处理
+    handlePageChange(page) {
+      this.currentPage = page;
+      this.fetchAccounts();
+    },
+
+    // ✅ 详情跳转
+    viewDetails(accountId) {
+      console.log('跳转到详情:', accountId);
+      // 示例：假设跳转到详情页
+      window.location.href = `/account/${accountId}`;
+    },
+
+    // ✅ 编辑跳转
     editAccount(accountId) {
-      this.$router.push(`/account/edit/${accountId}`);
+      console.log('跳转到编辑:', accountId);
+      // 示例：跳转到编辑页
+      window.location.href = `/account/edit/${accountId}`;
     },
     // 删除账户
     async deleteAccount(accountId) {
@@ -131,17 +213,14 @@ const AccountList = {
     createAccount() {
       this.$router.push('/account/create');
     },
-    // 分页切换
-    handlePageChange(page) {
-      this.currentPage = page;
-      this.fetchAccounts();
-    },
     handleSortChange({ column, prop, order }) {
       if (prop === 'name') {
         this.sortField = prop;
         this.sortOrder = order === 'ascending' ? 'asc' : 'desc';
-        this.fetchAccounts();
+      } else {
+        this.sortField = null;   // 避免传递 undefined
       }
+      this.fetchAccounts();
     },
   },
 };

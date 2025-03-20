@@ -1,12 +1,11 @@
 import json
-from rest_framework.decorators import api_view
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
-from rest_framework import status, serializers
+from rest_framework import status
 from django.db import transaction
+from django.db.models import Q
 from .models import (
     Object,
     ObjectField,
@@ -27,16 +26,6 @@ from .serializers import (
 )
 
 
-@api_view(["GET"])
-def get_all_objects(request):
-    """
-    查询所有对象
-    示例：GET /api/objects/
-    """
-    objects = Object.objects.all().values("id", "name", "label")
-    return Response(list(objects))
-
-
 # 自定义分页
 class AccountPagination(PageNumberPagination):
     page_size = 20  # 每页显示 20 条数据
@@ -45,83 +34,62 @@ class AccountPagination(PageNumberPagination):
 
 
 class MainViewSet(ModelViewSet):
-    queryset = Account.objects.all()
     serializer_class = AccountSerializer
     serializer_class = AccountSerializer
     pagination_class = AccountPagination  # 启用分页
-    filter_backends = [SearchFilter, OrderingFilter]  # 支持搜索 & 排序
-    search_fields = ["^name"]  # 允许通过name首字母搜索
-    ordering_fields = ["id", "name"]  # 允许排序字段
-    ordering = ["name"]  # 默认按 name 排序
+
+    def get_queryset(self):
+        """保持通用性：仅过滤未删除数据"""
+        queryset = Account.objects.filter(deleted="0")
+
+        # 搜索功能
+        search = self.request.query_params.get("search")
+        if search:
+            # JSON 字段模糊搜索
+            queryset = queryset.filter(
+                Q(data__name__icontains=search)  # 模糊匹配
+                | Q(data__name__istartswith=search)  # 首字母匹配
+            )
+
+        return queryset
 
     def list(self, request, *args, **kwargs):
         try:
-            # ✅ 获取 object_id 参数
+            # 获取 object_id 参数
             object_id = request.query_params.get("object_id")
             if not object_id:
                 return Response(
                     {"error": "缺少 object_id 参数"}, status=status.HTTP_400_BAD_REQUEST
                 )
+            # 获取字段映射
+            field_map, error = get_field_map(object_id)
+            if error:
+                return Response({"error": error}, status=status.HTTP_404_NOT_FOUND)
 
-            # ✅ 查询 Object 和 PageList
-            try:
-                obj = Object.objects.get(id=object_id)
-            except Object.DoesNotExist:
+            # 查询数据
+            queryset = self.get_queryset().filter(object_id=object_id)
+            # 排序
+            sorted_queryset = queryset.order_by("data__account_name")
+            # 分页
+            page = self.paginate_queryset(sorted_queryset)
+
+            if page is None:
                 return Response(
-                    {"error": "Object 不存在"}, status=status.HTTP_404_NOT_FOUND
+                    {"error": "分页数据不存在"}, status=status.HTTP_404_NOT_FOUND
                 )
 
-            # 获取关联的 PageList 配置
-            page_list = (
-                PageList.objects.filter(
-                    pagelistfield__object_field__object=obj, deleted="0"
-                )
-                .distinct()
-                .first()
-            )
-            if not page_list:
-                return Response(
-                    {"error": "未找到页面配置"}, status=status.HTTP_404_NOT_FOUND
-                )
-
-            # ✅ 查询 PageListField 并生成字段映射
-            page_list_fields = PageListField.objects.filter(
-                page_list=page_list, deleted="0", hidden="0"
-            )
-            if not page_list_fields.exists():
-                return Response(
-                    {"error": "未配置展示字段"}, status=status.HTTP_404_NOT_FOUND
-                )
-
-            # ✅ 动态生成字段映射：{业务字段名: 前端显示名}
-            field_map = {
-                field.object_field.name: field.name for field in page_list_fields
-            }
-
-            # ✅ 查询业务数据
-            accounts = Account.objects.filter(object=obj)
-            paginator = self.pagination_class()
-            page = paginator.paginate_queryset(accounts, request)
-
-            # ✅ 动态生成返回数据
+            # 动态生成返回数据
             result = []
             for account in page:
-                parsed_data = parse_data_field(account.data)
+                parsed_data = account.data
                 data = {
-                    field_map.get(field, field): parsed_data.get(
-                        field, "N/A"
-                    )  # 使用标签作为key
+                    field_map.get(field, field): parsed_data.get(field, "N/A")
                     for field in field_map
                 }
-                data["id"] = str(account.id)
-                data["created_at"] = account.created_at
-                data["updated_at"] = account.updated_at
                 result.append(data)
 
-            # ✅ 返回数据（只返回 data）
-            return Response(result, status=status.HTTP_200_OK)
+            return self.get_paginated_response(result)
         except Exception as e:
-            # 统一异常处理
             return Response(
                 {"code": 500, "error": f"服务器内部错误: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -433,8 +401,37 @@ class AccountViewSet(ModelViewSet):
     serializer_class = AccountSerializer
 
 
+def get_field_map(object_id):
+    """生成字段映射"""
+    try:
+        obj = Object.objects.get(id=object_id)
+    except Object.DoesNotExist:
+        return {}, "Object 不存在"
+
+    # ✅ 查询关联的 PageList
+    page_list = (
+        PageList.objects.filter(pagelistfield__object_field__object=obj, deleted="0")
+        .distinct()
+        .first()
+    )
+    if not page_list:
+        return {}, "未找到页面配置"
+
+    # ✅ 查询 PageListField 并生成字段映射
+    page_list_fields = PageListField.objects.filter(
+        page_list=page_list, deleted="0", hidden="0"
+    )
+
+    if not page_list_fields.exists():
+        return {}, "未配置展示字段"
+
+    # ✅ 映射规则：{业务字段名: 显示名称}
+    field_map = {field.object_field.name: field.name for field in page_list_fields}
+
+    return field_map, None
+
+
 def parse_data_field(data):
-    """解析 data 字段，如果是字符串，则将其转为字典"""
     if not data:
         return {}
     if isinstance(data, str):
