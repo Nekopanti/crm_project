@@ -86,6 +86,7 @@ class MainViewSet(ModelViewSet):
                     field_map.get(field, field): parsed_data.get(field, "N/A")
                     for field in field_map
                 }
+                data["id"] = account.id
                 result.append(data)
 
             return self.get_paginated_response(result)

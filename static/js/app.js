@@ -1,31 +1,62 @@
 // Vue.js 组件
+const ObjectSelection = {
+  template: `
+    <div style="padding: 20px;">
+      <!-- 对象选择页面 -->
+      <h1>选择对象</h1>
+
+      <el-select 
+        v-model="selectedObjectId" 
+        placeholder="请选择对象" 
+        style="width: 100%; margin-bottom: 20px;"
+      >
+        <el-option
+          v-for="object in objects"
+          :key="object.id"
+          :label="object.label"
+          :value="object.id"
+        />
+      </el-select>
+
+      <el-button 
+        type="success" 
+        @click="goToAccountList" 
+        :disabled="!selectedObjectId"
+      >
+        进入列表
+      </el-button>
+    </div>
+  `,
+  data() {
+    return {
+      objects: [],
+      selectedObjectId: ''
+    };
+  },
+  created() {
+    this.fetchObjects();
+  },
+  methods: {
+    async fetchObjects() {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/api/objects/');
+        this.objects = response.data;
+      } catch (error) {
+        console.error('获取对象失败', error);
+      }
+    },
+    goToAccountList() {
+      if (this.selectedObjectId) {
+        this.$router.push(`/account-list/${this.selectedObjectId}`);
+      }
+    }
+  }
+};
 const AccountList = {
   template: `
     <div style="padding: 20px;">
-
-      <!-- 对象选择页面 -->
-      <div v-if="!showAccountList">
-        <h1>选择对象</h1>
-        <el-select 
-          v-model="selectedObjectId" 
-          placeholder="请选择对象" 
-          style="width: 100%; margin-bottom: 20px;"
-        >
-          <el-option
-            v-for="object in objects"
-            :key="object.id"
-            :label="object.label"
-            :value="object.id"
-          />
-        </el-select>
-
-        <el-button type="success" @click="goToAccountList" :disabled="!selectedObjectId">
-          进入列表
-        </el-button>
-      </div>
-
       <!-- 账户列表页面 -->
-      <div v-else>
+      <div>
         <h1>{{ pageListTitle }}</h1>
 
         <!-- 搜索框 -->
@@ -38,7 +69,7 @@ const AccountList = {
 
         <el-skeleton v-if="loading" :rows="6" animated />
 
-        <el-table v-else :data="filteredAccounts" style="width: 100%">
+        <el-table v-else :data="filteredAccounts" style="width: 100%" row-key="id">
           <el-table-column
             v-for="(value, key) in filteredAccounts[0]"
             :key="key"
@@ -61,20 +92,15 @@ const AccountList = {
           :total="totalCount"
           @current-change="handlePageChange"
         />
-        <!-- 创建账户按钮 -->
-        <el-button type="success" @click="createAccount" style="margin-top: 20px;">
-          创建账户
-        </el-button>
-        <el-button type="primary" @click="showAccountList = false" style="margin-top: 20px;">
-          返回
-          </el-button>
+        <div style="display: flex; align-items: center; margin-top: 20px;">
+          <el-button type="success" @click="createAccount">新建</el-button>
+          <el-button type="primary" @click="goBack">返回</el-button>
+        </div>
       </div>
     </div>
   `,
   data() {
     return {
-      objects: [],
-      selectedObjectId: '',
       pageListTitle: '',
       accounts: [],
       searchQuery: '',
@@ -82,31 +108,20 @@ const AccountList = {
       pageSize: 20,
       totalCount: 0,
       loading: false,
-      sortField: null,
-      sortOrder: 'asc',
       filteredAccounts: [],
-      showAccountList: false,
     };
   },
   created() {
-    this.fetchObjects();
-    this.debouncedFilterAccounts = this.debounce(this.filterAccounts, 300);
+    this.fetchPageList();
+    this.fetchAccounts();
+    this.debouncedFilterAccounts = this.debounce(this.filterAccounts.bind(this), 300);
   },
   methods: {
-    async fetchObjects() {
-      try {
-        const response = await axios.get('http://127.0.0.1:8000/api/objects/');
-        this.objects = response.data;
-      } catch (error) {
-        console.error('获取对象失败', error);
-      }
-    },
     async fetchPageList() {
       this.loading = true;
       try {
         const response = await axios.get(`http://127.0.0.1:8000/api/page-lists/`);
         this.pageListTitle = response.data[0]?.label || "未配置页面";
-        this.fetchAccounts();
       } catch (error) {
         console.error('获取 PageList 名称失败', error);
       }
@@ -117,15 +132,16 @@ const AccountList = {
       try {
         const response = await axios.get('http://127.0.0.1:8000/api/main/', {
           params: {
-            object_id: this.selectedObjectId,
-            search: this.searchQuery,
-            page: this.currentPage,
-            page_size: this.pageSize,
+            object_id: this.$route.params.objectId || '',
+            search: this.searchQuery || '',
+            page: this.currentPage || 1,
+            page_size: this.pageSize || 20,
           }
         });
-        console.log(response.data);
         this.accounts = response.data.results;
+        console.log(this.accounts);
         this.filteredAccounts = [...this.accounts];
+        console.log(this.filteredAccounts[0]);
         this.totalCount = response.data.count;
       } catch (error) {
         console.error('获取账户失败', error);
@@ -135,11 +151,13 @@ const AccountList = {
     filterAccounts() {
       if (!this.searchQuery) {
         this.filteredAccounts = [...this.accounts];
+        this.totalCount = this.accounts.length;
       } else {
         const searchTerm = this.searchQuery.toLowerCase();
         this.filteredAccounts = this.accounts.filter(account => {
           return account.account_name.toLowerCase().includes(searchTerm);
         });
+        this.totalCount = this.filteredAccounts.length;
       }
     },
     formatLabel(key) {
@@ -157,30 +175,22 @@ const AccountList = {
         timer = setTimeout(() => func.apply(this, args), wait);
       };
     },
-    goToAccountList() {
-      if (!this.selectedObjectId) return;
-      this.showAccountList = true;
-      this.fetchPageList();
-    },
-
     // ✅ 分页处理
     handlePageChange(page) {
       this.currentPage = page;
       this.fetchAccounts();
     },
-
+    // 创建账户
+    createAccount() {
+      this.$router.push('/account/create');
+    },
     // ✅ 详情跳转
     viewDetails(accountId) {
-      console.log('跳转到详情:', accountId);
-      // 示例：假设跳转到详情页
-      window.location.href = `/account/${accountId}`;
+      this.$router.push(`/account/${accountId}`);
     },
-
     // ✅ 编辑跳转
     editAccount(accountId) {
-      console.log('跳转到编辑:', accountId);
-      // 示例：跳转到编辑页
-      window.location.href = `/account/edit/${accountId}`;
+      this.$router.push(`/account/edit/${accountId}`);
     },
     // 删除账户
     async deleteAccount(accountId) {
@@ -209,16 +219,16 @@ const AccountList = {
         }
       }
     },
-    // 创建账户
-    createAccount() {
-      this.$router.push('/account/create');
+    // 返回上一页
+    goBack() {
+      this.$router.go(-1);
     },
     handleSortChange({ column, prop, order }) {
       if (prop === 'name') {
         this.sortField = prop;
         this.sortOrder = order === 'ascending' ? 'asc' : 'desc';
       } else {
-        this.sortField = null;   // 避免传递 undefined
+        this.sortField = null;
       }
       this.fetchAccounts();
     },
@@ -1238,6 +1248,10 @@ const router = VueRouter.createRouter({
   routes: [
     {
       path: '/',
+      component: ObjectSelection,
+    },
+    {
+      path: '/account-list/:objectId',
       component: AccountList,
     },
     {
