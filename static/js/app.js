@@ -54,28 +54,36 @@ const ObjectSelection = {
 };
 const AccountList = {
   template: `
-    <div style="padding: 20px;">
+    <div class="account-list" style="padding: 20px;">
       <!-- 账户列表页面 -->
-      <div>
-        <h1>{{ pageListTitle }}</h1>
+      <h1>{{ pageListTitle }}</h1>
 
-        <!-- 搜索框 -->
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索账户名称"
-          @input="debouncedFilterAccounts"
-          style="margin-bottom: 20px;"
-        />
+      <!-- 搜索框 -->
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索账户名称"
+        style="margin-bottom: 20px;"
+      />
 
+      <!-- 表格区域 -->
+      <div class="table-container">
         <el-skeleton v-if="loading" :rows="6" animated />
-
-        <el-table v-else :data="filteredAccounts" style="width: 100%" row-key="id">
+        <el-table v-else :data="accounts" style="width: 100%" @sort-change="handleSortChange">
           <el-table-column
-            v-for="(value, key) in filteredAccounts[0]"
+            v-for="key in filteredColumns"
             :key="key"
-            :prop="key"
+            :prop="key" 
             :label="formatLabel(key)"
+            :sortable="true"
           />
+            <template #header="{ column }">
+              <span>{{ formatLabel(column.property) }}</span>
+              <el-button
+                v-if="column.property === 'account_name'"
+                icon="el-icon-sort"
+                @click="sortByColumn(column.property)"
+              ></el-button>
+            </template>
           <el-table-column label="操作">
             <template #default="{ row }">
               <el-button type="primary" @click="viewDetails(row.id)">详情</el-button>
@@ -84,15 +92,21 @@ const AccountList = {
             </template>
           </el-table-column>
         </el-table>
+      </div>
 
+      <!-- 底部固定区域 -->
+      <div class="footer">
+
+        <!-- 分页 -->
         <el-pagination
-          style="margin-top: 20px;"
           :current-page="currentPage"
           :page-size="pageSize"
           :total="totalCount"
           @current-change="handlePageChange"
         />
-        <div style="display: flex; align-items: center; margin-top: 20px;">
+
+        <!-- 按钮组 -->
+        <div class="button-group" style="display: flex; gap: 10px; margin-top: 20px;">
           <el-button type="success" @click="createAccount">新建</el-button>
           <el-button type="primary" @click="goBack">返回</el-button>
         </div>
@@ -102,25 +116,41 @@ const AccountList = {
   data() {
     return {
       pageListTitle: '',
+      pagelistId: '',
       accounts: [],
       searchQuery: '',
       currentPage: 1,
       pageSize: 20,
       totalCount: 0,
       loading: false,
-      filteredAccounts: [],
+      sortField: 'account_name',
+      sortOrder: 'asc',
     };
+  },
+  computed: {
+    // 计算属性：获取过滤后的列名，隐藏 id
+    filteredColumns() {
+      if (this.accounts.length === 0) return [];
+      const columns = Object.keys(this.accounts[0]);
+      return ['account_name', ...columns.filter(key => key !== 'account_name' && key !== 'id')];
+    },
   },
   created() {
     this.fetchPageList();
     this.fetchAccounts();
-    this.debouncedFilterAccounts = this.debounce(this.filterAccounts.bind(this), 300);
+  },
+  watch: {
+    searchQuery() {
+      this.currentPage = 1;
+      this.fetchAccounts();
+    }
   },
   methods: {
     async fetchPageList() {
       this.loading = true;
       try {
         const response = await axios.get(`http://127.0.0.1:8000/api/page-lists/`);
+        this.pagelistId = response.data[0]?.id || '';
         this.pageListTitle = response.data[0]?.label || "未配置页面";
       } catch (error) {
         console.error('获取 PageList 名称失败', error);
@@ -133,31 +163,26 @@ const AccountList = {
         const response = await axios.get('http://127.0.0.1:8000/api/main/', {
           params: {
             object_id: this.$route.params.objectId || '',
-            search: this.searchQuery || '',
+            search: this.searchQuery.trim() || '',
             page: this.currentPage || 1,
             page_size: this.pageSize || 20,
+            sort_field: this.sortField,
+            sort_order: this.sortOrder,
           }
         });
+        // 处理删除最后一条数据的情况
+        if (response.data.results.length === 0 && this.currentPage > 1) {
+          this.currentPage--;
+          await this.fetchAccounts();
+          return;
+        }
         this.accounts = response.data.results;
-        console.log(this.accounts);
-        this.filteredAccounts = [...this.accounts];
-        console.log(this.filteredAccounts[0]);
         this.totalCount = response.data.count;
       } catch (error) {
         console.error('获取账户失败', error);
-      }
-      this.loading = false;
-    },
-    filterAccounts() {
-      if (!this.searchQuery) {
-        this.filteredAccounts = [...this.accounts];
-        this.totalCount = this.accounts.length;
-      } else {
-        const searchTerm = this.searchQuery.toLowerCase();
-        this.filteredAccounts = this.accounts.filter(account => {
-          return account.account_name.toLowerCase().includes(searchTerm);
-        });
-        this.totalCount = this.filteredAccounts.length;
+        this.$message.error('数据加载失败');
+      } finally {
+        this.loading = false;
       }
     },
     formatLabel(key) {
@@ -168,42 +193,60 @@ const AccountList = {
       };
       return labelMap[key] || key;  // 默认返回字段名
     },
-    debounce(func, wait) {
-      let timer;
-      return (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => func.apply(this, args), wait);
-      };
-    },
-    // ✅ 分页处理
+    // 分页处理
     handlePageChange(page) {
       this.currentPage = page;
       this.fetchAccounts();
     },
     // 创建账户
     createAccount() {
-      this.$router.push('/account/create');
+      this.$router.push({
+        path: `/account/create`,
+        query: {
+          object_id: this.$route.params.objectId,
+        }
+      });
     },
-    // ✅ 详情跳转
+    // 详情跳转
     viewDetails(accountId) {
-      this.$router.push(`/account/${accountId}`);
+      this.$router.push({
+        path: `/account/${accountId}`,
+        query: {
+          pagelist_id: this.pagelistId,
+        }
+      });
     },
-    // ✅ 编辑跳转
+    // 编辑跳转
     editAccount(accountId) {
-      this.$router.push(`/account/edit/${accountId}`);
+      this.$router.push({
+        path: `/account/edit/${accountId}`,
+        query: {
+          pagelist_id: this.pagelistId,
+        }
+      });
     },
     // 删除账户
     async deleteAccount(accountId) {
       try {
+        await this.$confirm('确定删除该账户？此操作不可逆！', '警告', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+      });
         const response = await axios.delete(`http://127.0.0.1:8000/api/main/${accountId}/`);
         if (response.status === 204) {
           this.$message.success("删除成功！");
-          this.fetchAccounts(); // 重新加载账户列表
+          if (this.accounts.length === 1 && this.currentPage > 1) {
+            this.currentPage--;
+          }
+          await this.fetchAccounts();
         }
       } catch (error) {
         console.error('删除账户失败', error);
+        if (error !== 'cancel') {  // 用户点击取消不视为错误
+          return;
+        }
         if (error.response) {
-          // 根据后端返回的状态码显示不同的错误消息
           switch (error.response.status) {
             case 404:
               this.$message.error("账户不存在！");
@@ -214,7 +257,7 @@ const AccountList = {
             default:
               this.$message.error("删除失败，请重试！");
           }
-        } else {
+        } else if (error.request) {
           this.$message.error("网络错误，请检查连接！");
         }
       }
@@ -224,11 +267,18 @@ const AccountList = {
       this.$router.go(-1);
     },
     handleSortChange({ column, prop, order }) {
-      if (prop === 'name') {
+      if (prop) {
         this.sortField = prop;
         this.sortOrder = order === 'ascending' ? 'asc' : 'desc';
+        this.fetchAccounts();
+      }
+    },
+    sortByColumn(column) {
+      if (this.sortField === column) {
+        this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
       } else {
-        this.sortField = null;
+        this.sortField = column;
+        this.sortOrder = 'asc';
       }
       this.fetchAccounts();
     },
@@ -237,97 +287,71 @@ const AccountList = {
 
 const RetrieveAccount = {
   template: `
-    <div>
-      <h1>账户详情</h1>
+    <div class="account-details">
+      <h1 class="page-title">{{ pageLayoutName }}</h1>
+      
       <!-- 加载状态 -->
-      <el-skeleton v-if="loading" :rows="6" animated />
-      <div v-else>
-        <!-- PageList 信息 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page List</h2>
-          <p>ID: {{ pageList.id }}</p>
-          <p>Name: {{ pageList.name }}</p>
-          <p>Label: {{ pageList.label }}</p>
-          <p>Deleted: {{ pageList.deleted }}</p>
-        </el-card>
-
-        <!-- PageListField 信息 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page List Fields</h2>
-          <el-table :data="pageListFields" style="width: 100%">
-            <el-table-column prop="name" label="Name" />
-            <el-table-column prop="hidden" label="Hidden" />
-            <el-table-column prop="type" label="Type" />
-            <el-table-column prop="deleted" label="Deleted" />
-          </el-table>
-        </el-card>
-
-        <!-- PageLayout 信息 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page Layouts</h2>
-          <el-table :data="pageLayouts" style="width: 100%">
-            <el-table-column prop="name" label="Name" />
-            <el-table-column prop="deleted" label="Deleted" />
-          </el-table>
-        </el-card>
-
-        <!-- PageLayoutField 信息 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page Layout Fields</h2>
-          <el-table :data="pageLayoutFields" style="width: 100%">
-            <el-table-column prop="name" label="Name" />
-            <el-table-column prop="label" label="Label" />
-            <el-table-column prop="type" label="Type" />
-            <el-table-column prop="deleted" label="Deleted" />
-          </el-table>
-        </el-card>
-
-        <el-button @click="goBack">返回</el-button>
+      <div class="details-container">
+        <el-skeleton v-if="loading" :rows="6" animated />
+        <el-table v-else :data="accountTableData" border style="width: 100%">
+          <el-table-column prop="key" label="属性" width="200" />
+          <el-table-column prop="value" label="值" />
+        </el-table>
       </div>
+
+        <!-- 返回按钮 -->
+        <div class="button-group" style="display: flex; gap: 10px; margin-top: 20px;">
+          <el-button type="primary" @click="goBack">返回</el-button>
+        </div>
     </div>
   `,
   data() {
     return {
-      pageList: {}, // PageList 数据
-      pageListFields: [], // PageListField 数据
-      pageLayouts: [], // PageLayout 数据
-      pageLayoutFields: [], // PageLayoutField 数据
-      loading: true, // 加载状态
+      pageLayoutName: "",
+      accountData: {},
+      loading: true,
+      accountTableData: [],
     };
   },
   created() {
     this.fetchData();
   },
   methods: {
-    // 获取数据
     async fetchData() {
       try {
         const accountId = this.$route.params.id;
-        const response = await axios.get(`http://127.0.0.1:8000/api/main/${accountId}/`);
-        this.pageList = response.data.page_list;
-        this.pageListFields = response.data.page_list_fields;
-        this.pageLayouts = response.data.page_layout;
-        this.pageLayoutFields = response.data.page_layout_fields;
+        const pagelistId = this.$route.query.pagelist_id;
+        const response = await axios.get(`http://127.0.0.1:8000/api/main/${accountId}/`, {
+          params: { pagelist_id: pagelistId }
+        });
+        this.pageLayoutName = response.data.page_layout.name || "账户详情";
+        this.accountData = response.data.filtered_data;
+        this.accountTableData = Object.entries(this.accountData).map(([key, value]) => ({
+          key,
+          value,
+        }));
       } catch (error) {
-        console.error('获取数据失败', error);
-        if (error.response) {
-          switch (error.response.status) {
-            case 404:
-              this.$message.error("账户不存在！");
-              break;
-            case 500:
-              this.$message.error("服务器错误，请重试！");
-              break;
-            default:
-              this.$message.error("获取数据失败，请重试！");
-          }
-        } else {
-          this.$message.error("网络错误，请检查连接！");
-        }
+        console.error("获取数据失败", error);
+        this.handleError(error);
       }
       this.loading = false;
     },
-    // 返回上一页
+    handleError(error) {
+      if (error.response) {
+        switch (error.response.status) {
+          case 404:
+            this.$message.error("数据不存在！");
+            break;
+          case 500:
+            this.$message.error("服务器错误，请重试！");
+            break;
+          default:
+            this.$message.error("获取数据失败，请重试！");
+        }
+      } else {
+        this.$message.error("网络错误，请检查连接！");
+      }
+    },
     goBack() {
       this.$router.go(-1);
     },
@@ -336,438 +360,118 @@ const RetrieveAccount = {
 
 const CreateAccount = {
   template: `
-    <div>
-      <h1>创建账户</h1>
-      <el-form :model="formData" label-width="120px">
-        <!-- Object 表单 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Object</h2>
-          <el-table :data="formData.object" border>
-            <el-table-column prop="name" label="Name">
-              <template #default="scope">
-                <div style="display: flex; align-items: center;">
-                  <span style="color: red; margin-right: 5px;">*</span>
-                  <el-input
-                  v-model="scope.row.name"
-                  @change="checkName(scope.row)"
-                  />
-                </div>
-                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="label" label="Label">
-              <template #default="scope">
-                <el-input v-model="scope.row.label" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="table_name" label="Table Name">
-              <template #default="scope">
-                <el-input v-model="scope.row.table_name" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="deleted" label="Deleted">
-              <template #default="scope">
-                <el-switch 
-                  v-model="scope.row.deleted"
-                  active-value="1"
-                  inactive-value="0"
-                />
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
+  <div>
+    <h1>创建账户</h1>
+    <el-form :model="formData" label-width="120px">
+      <el-card style="margin-bottom: 20px;">
+        <h2>Account</h2>
+        <el-form-item v-for="(value, key) in formData" :key="key">
+          <template #label>
+            <span v-if="isRequiredField(key)" style="color: red;">*</span> {{ formatLabel(key) }}
+          </template>
+          <el-input v-model="formData[key]" placeholder="请输入内容" style="width: 80%;"/>
+          <el-button v-if="key !== 'account_name'" type="danger" @click="removeField(key)" style="margin-left: 10px;" >删除</el-button>
+        </el-form-item>
 
-        <!-- ObjectField 表单 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Object Field</h2>
-          <el-table :data="formData.objectFields" border>
-            <el-table-column prop="name" label="Name">
-              <template #default="scope">
-                <div style="display: flex; align-items: center;">
-                  <span style="color: red; margin-right: 5px;">*</span>
-                  <el-input
-                  v-model="scope.row.name"
-                  @change="checkName(scope.row)"
-                  />
-                </div>
-                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="type" label="Type">
-              <template #default="scope">
-                <el-select v-model="scope.row.type">
-                  <el-option label="Text" value="text" />
-                  <el-option label="String" value="string" />
-                  <el-option label="Number" value="number" />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="Deleted">
-              <template #default="scope">
-                <el-switch 
-                  v-model="scope.row.deleted"
-                  active-value="1"
-                  inactive-value="0"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="120">
-              <template #default="scope">
-                <el-button @click="removeRow('objectFields', scope.$index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-button @click="addRow('objectFields')" style="margin-top:10px">+ 新增字段</el-button>
-        </el-card>
+        <!-- 新增字段输入框 -->
+        <el-form-item label="新增(选填)">
+          <el-input v-model="newFieldName" placeholder="字段名称" style="width: 39%;" />
+          <el-input v-model="newFieldValue" placeholder="字段值" style="width: 40%; margin-left: 10px;" />
+          <el-button @click="addField" style="margin-left: 10px;">➕</el-button>
+        </el-form-item>
+      </el-card>
 
-        <!-- PageList 表单 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page List</h2>
-          <el-table :data="[formData.pageList]" border>
-            <el-table-column prop="name" label="Name">
-              <template #default="scope">
-                <div style="display: flex; align-items: center;">
-                  <span style="color: red; margin-right: 5px;">*</span>
-                  <el-input
-                  v-model="scope.row.name"
-                  @change="checkName(scope.row)"
-                  />
-                </div>
-                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="label" label="Label">
-              <template #default="scope">
-                <el-input v-model="scope.row.label" />
-              </template>
-            </el-table-column>
-            <el-table-column label="Deleted">
-              <template #default="scope">
-                <el-switch 
-                  v-model="scope.row.deleted"
-                  active-value="1"
-                  inactive-value="0"
-                />
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-
-        <!-- PageListField 表单 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page List Field</h2>
-          <el-table :data="formData.pageListFields" border>
-            <el-table-column prop="name" label="Name">
-              <template #default="scope">
-                <div style="display: flex; align-items: center;">
-                  <span style="color: red; margin-right: 5px;">*</span>
-                  <el-input
-                  v-model="scope.row.name"
-                  @change="checkName(scope.row)"
-                  />
-                </div>
-                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-              </template>
-            </el-table-column>
-            <el-table-column label="Hidden">
-              <template #default="scope">
-                <el-switch 
-                  v-model="scope.row.hidden"
-                  active-value="1"
-                  inactive-value="0"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column prop="type" label="Type">
-              <template #default="scope">
-                <el-select v-model="scope.row.type">
-                  <el-option label="Text" value="text" />
-                  <el-option label="String" value="string" />
-                  <el-option label="Number" value="number" />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="120">
-              <template #default="scope">
-                <el-button @click="removeRow('pageListFields', scope.$index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-button @click="addRow('pageListFields')" style="margin-top:10px">+ 新增字段</el-button>
-        </el-card>
-
-        <!-- PageLayout 表单 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page Layout</h2>
-          <el-table :data="formData.pageLayout" border>
-            <el-table-column prop="name" label="Name">
-              <template #default="scope">
-                <div style="display: flex; align-items: center;">
-                  <span style="color: red; margin-right: 5px;">*</span>
-                  <el-input
-                  v-model="scope.row.name"
-                  @change="checkName(scope.row)"
-                  />
-                </div>
-                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-              </template>
-            </el-table-column>
-            <el-table-column label="Deleted">
-              <template #default="scope">
-                <el-switch 
-                  v-model="scope.row.deleted"
-                  active-value="1"
-                  inactive-value="0"
-                />
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-
-        <!-- PageLayoutField 表单 -->
-        <el-card style="margin-bottom: 20px;">
-          <h2>Page Layout Field</h2>
-          <el-table :data="formData.pageLayoutFields" border>
-            <el-table-column prop="name" label="Name">
-              <template #default="scope">
-                <div style="display: flex; align-items: center;">
-                  <span style="color: red; margin-right: 5px;">*</span>
-                  <el-input
-                  v-model="scope.row.name"
-                  @change="checkName(scope.row)"
-                  />
-                </div>
-                <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="label" label="Label">
-              <template #default="scope">
-                <el-input v-model="scope.row.label" />
-              </template>
-            </el-table-column>
-            <el-table-column prop="type" label="Type">
-              <template #default="scope">
-                <el-select v-model="scope.row.type">
-                  <el-option label="Text" value="text" />
-                  <el-option label="String" value="string" />
-                  <el-option label="Number" value="number" />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="120">
-              <template #default="scope">
-                <el-button @click="removeRow('pageLayoutFields', scope.$index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-button @click="addRow('pageLayoutFields')" style="margin-top:10px">+ 新增字段</el-button>
-        </el-card>
-
-        <el-button type="primary" @click="submitForm">提交</el-button>
-        <el-button @click="goBack">返回</el-button>
-      </el-form>
-    </div>
+      <el-button type="primary" @click="submitForm" style="margin-top: 20px">创建</el-button>
+      <el-button @click="goBack" style="margin-top: 20px">返回</el-button>
+    </el-form>
+  </div>
   `,
   data() {
     return {
       formData: {
-        object: [
-          {
-            name: "",
-            label: "",
-            table_name: "",
-            deleted: "0",
-          },
-        ],
-        objectFields: [
-          {
-            name: "",
-            type: "",
-            deleted: "0",
-          },
-        ],
-        pageList: {
-          name: "",
-          label: "",
-          deleted: "0",
-        },
-        pageListFields: [
-          {
-            name: "",
-            hidden: "0",
-            type: "",
-            deleted: "0",
-          },
-        ],
-        pageLayout: [
-          {
-            name: "",
-            deleted: "0",
-          },
-        ],
-        pageLayoutFields: [
-          {
-            name: "",
-            label: "",
-            type: "",
-            deleted: "0",
-          },
-        ],
+        account_name: "",
+        department: "",
+        hospital: "",
+        phone: ""
       },
+      newFieldName: "",
+      newFieldValue: ""
     };
   },
   methods: {
-    addRow(tableType) {
-      const baseData = {
-        objectFields: { name: '', type: '', deleted: '0' },
-        pageListFields: { name: '', hidden: '0', type: '' },
-        pageLayout: { name: '', deleted: '0' },
-        pageLayoutFields: { name: '', label: '', type: '', deleted: '0' }
+    // 格式化标签
+    formatLabel(key) {
+      const labelMap = {
+        account_name: '账户名称',
+        department: '部门',
+        hospital: '医院',
+        phone: '电话',
+      };
+      return labelMap[key] || key;
+    },
+    isRequiredField(key) {
+      return ["account_name"].includes(key);
+    },
+    // 添加新字段
+    addField() {
+      if (!this.newFieldName.trim()) {
+        this.$message.error("字段名称不能为空！");
+        return;
       }
-      this.formData[tableType].push({ ...baseData[tableType] })
+      if (this.formData.hasOwnProperty(this.newFieldName)) {
+        this.$message.error("字段已存在！");
+        return;
+      }
+      this.formData[this.newFieldName] = this.newFieldValue;
+      this.newFieldName = "";
+      this.newFieldValue = "";
     },
-    removeRow(tableType, index) {
-      this.formData[tableType].splice(index, 1)
-    },
+    removeField(key) {
+      if (key === 'account_name') {
+        this.$message.warning("账户名称不能删除！");
+        return;
+      }
+      const { [key]: _, ...newData } = this.formData;
+      this.formData = newData;
+    },  
     goBack() {
       this.$router.go(-1);
     },
-    async submitForm() {
-      let isValid = true;
-
-      if (!this.formData.pageList.name) {
-        this.formData.pageList.showError = true;
-        isValid = false;
+    handleError(error) {
+      if (error.response) {
+        switch (error.response.status) {
+          case 404:
+            this.$message.error("数据不存在！");
+            break;
+          case 500:
+            this.$message.error("服务器错误，请重试！");
+            break;
+          default:
+            this.$message.error("获取数据失败，请重试！");
+        }
       } else {
-        this.formData.pageList.showError = false;
+        this.$message.error("网络错误，请检查连接！");
       }
-      this.formData.object.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.objectFields.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.pageListFields.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.pageLayout.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.pageLayoutFields.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      if (!isValid) {
-        this.$message.error("请填写所有必填项！");
-        return;
+    },
+    async submitForm() {
+      if (!this.formData.account_name?.trim()) {
+        return this.$message.error("账户名称是必填项！");
       }
       try {
+        const objectId = this.$route.query.object_id;
         const requestData = {
-          object: this.formData.object || [{ name: "", label: "", table_name: "", deleted: "0" }],
-          object_fields: this.formData.objectFields || [{ name: "", type: "", deleted: "0" }],
-          page_list: this.formData.pageList || { name: "", label: "", deleted: "0" },
-          page_list_fields: this.formData.pageListFields || [{ name: "", hidden: "0", type: "", deleted: "0" }],
-          page_layout: this.formData.pageLayout || [{ name: "", deleted: "0" }],
-          page_layout_fields: this.formData.pageLayoutFields || [{ name: "", label: "", type: "", deleted: "0" }],
+          object_id: objectId,
+          data: this.formData
         };
         const response = await axios.post('http://127.0.0.1:8000/api/main/', requestData);
         if (response.status === 201) {
           this.$message.success("创建成功！");
-          this.$router.push("/"); // 返回账户列表
-          this.resetForm(); // 清空表单
+          this.$router.go(-1);
         }
       } catch (error) {
         console.error("创建失败:", error);
-        if (error.response) {
-          switch (error.response.status) {
-            case 404:
-              this.$message.error("账户不存在！");
-              break;
-            case 500:
-              this.$message.error("服务器错误，请重试！");
-              break;
-            default:
-              this.$message.error("创建失败，请重试！");
-          }
-        } else {
-          this.$message.error("网络错误，请检查连接！");
-        }
+        this.handleError(error);
       }
-    },
-    resetForm() {
-      this.formData = {
-        object: [
-          {
-            name: "",
-            label: "",
-            table_name: "",
-            deleted: "0",
-          },
-        ],
-        objectFields: [
-          {
-            name: "",
-            type: "",
-            deleted: "0",
-          },
-        ],
-        pageList: {
-          name: "",
-          label: "",
-          deleted: "0",
-        },
-        pageListFields: [
-          {
-            name: "",
-            hidden: "0",
-            type: "",
-            deleted: "0",
-          },
-        ],
-        pageLayout: [
-          {
-            name: "",
-            deleted: "0",
-          },
-        ],
-        pageLayoutFields: [
-          {
-            name: "",
-            label: "",
-            type: "",
-            deleted: "0",
-          },
-        ],
-      };
     },
   },
 };
@@ -777,465 +481,98 @@ const UpdateAccount = {
   <div>
     <h1>编辑账户</h1>
     <el-form :model="formData" label-width="120px">
-      <!-- Object 表格 -->
       <el-card style="margin-bottom:20px;">
-        <h2>Object</h2>
-        <el-table :data="formData.object" border>
-          <el-table-column prop="name" label="Name">
-            <template #default="scope">
-              <div style="display: flex; align-items: center;">
-                <span style="color: red; margin-right: 5px;">*</span>
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-              </div>
-              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="label" label="Label">
-            <template #default="scope">
-              <el-input v-model="scope.row.label" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="table_name" label="Table Name">
-            <template #default="scope">
-              <el-input v-model="scope.row.table_name" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="deleted" label="Deleted">
-            <template #default="scope">
-              <el-switch 
-                v-model="scope.row.deleted"
-                active-value="1"
-                inactive-value="0"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <!-- ObjectField 可编辑表格 -->
-      <el-card style="margin-bottom:20px;">
-        <h2>Object Field</h2>
-        <el-table :data="formData.objectFields" border>
-          <el-table-column prop="name" label="Name">
-            <template #default="scope">
-              <div style="display: flex; align-items: center;">
-                <span style="color: red; margin-right: 5px;">*</span>
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-              </div>
-              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="type" label="Type">
-            <template #default="scope">
-              <el-select v-model="scope.row.type">
-                <el-option label="Text" value="text" />
-                <el-option label="String" value="string" />
-                <el-option label="Number" value="number" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="Deleted">
-            <template #default="scope">
-              <el-switch 
-                v-model="scope.row.deleted"
-                active-value="1"
-                inactive-value="0"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <!-- PageList 可编辑表格 -->
-      <el-card style="margin-bottom:20px;">
-        <h2>Page List</h2>
-        <el-table :data="[formData.pageList]" border>
-          <el-table-column prop="name" label="Name">
-            <template #default="scope">
-              <div style="display: flex; align-items: center;">
-                <span style="color: red; margin-right: 5px;">*</span>
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-              </div>
-              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="label" label="Label">
-            <template #default="scope">
-              <el-input v-model="scope.row.label" />
-            </template>
-          </el-table-column>
-          <el-table-column label="Deleted">
-            <template #default="scope">
-              <el-switch 
-                v-model="scope.row.deleted"
-                active-value="1"
-                inactive-value="0"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <!-- PageListField 可编辑表格 -->
-      <el-card style="margin-bottom:20px;">
-        <h2>Page List Field</h2>
-        <el-table :data="formData.pageListFields" border>
-          <el-table-column prop="name" label="Name">
-            <template #default="scope">
-              <div style="display: flex; align-items: center;">
-                <span style="color: red; margin-right: 5px;">*</span>
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-              </div>
-              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-            </template>
-          </el-table-column>
-          <el-table-column label="Hidden">
-            <template #default="scope">
-              <el-switch 
-                v-model="scope.row.hidden"
-                active-value="1"
-                inactive-value="0"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column prop="type" label="Type">
-            <template #default="scope">
-              <el-select v-model="scope.row.type">
-                <el-option label="Text" value="text" />
-                <el-option label="String" value="string" />
-                <el-option label="Number" value="number" />
-              </el-select>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <!-- PageLayout 可编辑表格 -->
-      <el-card style="margin-bottom:20px;">
-        <h2>Page Layout</h2>
-        <el-table :data="formData.pageLayout" border>
-          <el-table-column prop="name" label="Name">
-            <template #default="scope">
-              <div style="display: flex; align-items: center;">
-                <span style="color: red; margin-right: 5px;">*</span>
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-              </div>
-              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-            </template>
-          </el-table-column>
-          <el-table-column label="Deleted">
-            <template #default="scope">
-              <el-switch 
-                v-model="scope.row.deleted"
-                active-value="1"
-                inactive-value="0"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <!-- PageLayoutField 可编辑表格 -->
-      <el-card style="margin-bottom:20px;">
-        <h2>Page Layout Field</h2>
-        <el-table :data="formData.pageLayoutFields" border>
-          <el-table-column prop="name" label="Name">
-            <template #default="scope">
-              <div style="display: flex; align-items: center;">
-                <span style="color: red; margin-right: 5px;">*</span>
-                <el-input
-                v-model="scope.row.name"
-                @change="checkName(scope.row)"
-                />
-              </div>
-              <div v-if="scope.row.showError" style="color: red; margin-top: 5px;">名称不能为空！</div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="label" label="Label">
-            <template #default="scope">
-              <el-input v-model="scope.row.label" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="type" label="Type">
-            <template #default="scope">
-              <el-select v-model="scope.row.type">
-                <el-option label="Text" value="text" />
-                <el-option label="String" value="string" />
-                <el-option label="Number" value="number" />
-              </el-select>
-            </template>
-          </el-table-column>
-        </el-table>
+        <h2>Account</h2>
+        <el-form-item v-for="(value, key) in formData" :key="key">
+          <template #label>
+            <span v-html="formatLabel(key)"></span>
+          </template>
+          <el-input v-model="formData[key]" />
+          <span v-if="checkField(key, value)" style="color: red;">不能为空！</span>
+        </el-form-item>
       </el-card>
 
       <el-button type="primary" @click="submitForm" style="margin-top:20px">保存</el-button>
       <el-button @click="goBack" style="margin-top:20px">返回</el-button>
-    </div>
+    </el-form>
+  </div>
   `,
   data() {
     return {
-      formData: {
-        object: [
-          {
-            name: "",
-            label: "",
-            table_name: "",
-            deleted: "0",
-          },
-        ],
-        objectFields: [
-          {
-            name: "",
-            type: "",
-            deleted: "0",
-          },
-        ],
-        pageList: {
-          name: "",
-          label: "",
-          deleted: "0",
-        },
-        pageListFields: [
-          {
-            name: "",
-            hidden: "0",
-            type: "",
-            deleted: "0",
-          },
-        ],
-        pageLayout: [
-          {
-            name: "",
-            deleted: "0",
-          },
-        ],
-        pageLayoutFields: [
-          {
-            name: "",
-            label: "",
-            type: "",
-            deleted: "0",
-          },
-        ],
-      },
-      loading: true,
+      formData: {},
     };
   },
   created() {
     this.fetchData();
   },
   methods: {
-    // 返回上一页
-    goBack() {
-      this.$router.go(-1);
+    // 格式化标签
+    formatLabel(key) {
+      const requiredFields = ["account_name"]; 
+      const labelMap = {
+        account_name: '账户名称',
+        department: '部门',
+        hospital: '医院',
+        phone: '电话',
+      };
+      return requiredFields.includes(key) 
+        ? `<span style="color: red;">*</span> ${labelMap[key] || key}` 
+        : labelMap[key] || key;
     },
-    // // 通用行操作方法
-    // saveRow(tableType, row) {
-    //   console.log('保存:', tableType, row)
-    //   // 此处调用API保存数据[9](@ref)
-    // },
-    removeRow(tableType, index) {
-      this.formData[tableType].splice(index, 1)
+    checkField(key, value) {
+      const requiredFields = ["account_name"];
+      return requiredFields.includes(key) && !value;
     },
-    // addRow(tableType) {
-    //   const baseData = {
-    //     objectFields: { name: '', type: 'string', deleted: '0' },
-    //     pageListFields: { name: '', hidden: '0', type: 'text' },
-    //     pageLayout: { name: '', deleted: '0' },
-    //     pageLayoutFields: { name: '', label: '', type: 'input', deleted: '0' }
-    //   }
-    //   this.formData[tableType].push({ ...baseData[tableType] })
-    // },
-    // // 递归移除所有 id 字段
-    // removeIds(data) {
-    //   if (data === null || data === undefined) {
-    //     return data;
-    //   }
-
-    //   // 处理数组：递归处理每个元素
-    //   if (Array.isArray(data)) {
-    //     return data.map(item => this.removeIds(item));
-    //   }
-
-    //   // 处理对象：移除指定字段
-    //   if (typeof data === 'object') {
-    //     return Object.keys(data).reduce((acc, key) => {
-    //       // 需要删除的字段列表
-    //       const forbiddenKeys = [
-    //         'id',           // 所有主键ID
-    //         'object',        // Object关联对象
-    //         'object_field',  // ObjectField关联对象
-    //         'page_list',     // PageList关联对象
-    //         'page_layout'    // PageLayout关联对象
-    //       ];
-
-    //       // 仅保留不在黑名单中的字段
-    //       if (!forbiddenKeys.includes(key)) {
-    //         acc[key] = this.removeIds(data[key]);
-    //       }
-    //       return acc;
-    //     }, {});
-    //   }
-
-    //   // 基本类型直接返回
-    //   return data;
-    // },
     // 获取数据
     async fetchData() {
       try {
         const accountId = this.$route.params.id;
-        const response = await axios.get(`http://127.0.0.1:8000/api/main/${accountId}/`);
-        // console.log(response.data);
-        // console.log("object:", response.data.object);
-        // console.log("page_layout:", response.data.page_layout);
-        this.formData = {
-          object: response.data.object || [{ name: "", label: "", table_name: "", deleted: "0" }],
-          objectFields: response.data.object_fields || [{ name: "", type: "", deleted: "0" }],
-          pageList: response.data.page_list || { name: "", label: "", deleted: "0" },
-          pageListFields: response.data.page_list_fields || [{ name: "", hidden: "0", type: "", deleted: "0" }],
-          pageLayout: response.data.page_layout || [{ name: "", deleted: "0" }],
-          pageLayoutFields: response.data.page_layout_fields || [{ name: "", label: "", type: "", deleted: "0" }],
-        };
-        this.loading = false;// 填充表单数据
+        const pagelistId = this.$route.query.pagelist_id;
+        const response = await axios.get(`http://127.0.0.1:8000/api/main/${accountId}/`,{
+          params: { pagelist_id: pagelistId }
+        });
+        this.formData = response.data.account_data; 
+        this.loading = false;
       } catch (error) {
         console.error("获取数据失败:", error);
-        if (error.response) {
-          switch (error.response.status) {
-            case 404:
-              this.$message.error("账户不存在！");
-              break;
-            case 500:
-              this.$message.error("服务器错误，请重试！");
-              break;
-            default:
-              this.$message.error("获取数据失败，请重试！");
-          }
-        } else {
-          this.$message.error("网络错误，请检查连接！");
-        }
+        this.handleError(error);
       }
     },
     // 提交表单
     async submitForm() {
-      let isValid = true;
-
-      if (!this.formData.pageList.name) {
-        this.formData.pageList.showError = true;
-        isValid = false;
-      } else {
-        this.formData.pageList.showError = false;
-      }
-      this.formData.object.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.objectFields.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.pageListFields.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.pageLayout.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      this.formData.pageLayoutFields.forEach(item => {
-        if (!item.name) {
-          item.showError = true;
-          isValid = false;
-        } else {
-          item.showError = false;
-        }
-      });
-
-      if (!isValid) {
-        this.$message.error("请填写所有必填项！");
-        return;
+      if (!this.formData.account_name?.trim()) {
+        return this.$message.error("账户名称是必填项！");
       }
       try {
         const accountId = this.$route.params.id;
-        // console.log('提交数据:', this.formData.object);
-        // const requestData = {
-        //   object: this.removeIds(this.formData.object),
-        //   object_fields: this.removeIds(this.formData.objectFields),
-        //   page_list: this.removeIds(this.formData.pageList),
-        //   page_list_fields: this.removeIds(this.formData.pageListFields),
-        //   page_layout: this.removeIds(this.formData.pageLayout),
-        //   page_layout_fields: this.removeIds(this.formData.pageLayoutFields),
-        // };
-        const requestData = {
-          object: this.formData.object,
-          object_fields: this.formData.objectFields,
-          page_list: this.formData.pageList,
-          page_list_fields: this.formData.pageListFields,
-          page_layout: this.formData.pageLayout,
-          page_layout_fields: this.formData.pageLayoutFields,
-        };
-        // console.log('提交数据:', requestData);
-        // console.log('提交数据:', requestData.object);
-        // console.log('提交数据:', requestData.object_fields);
-        // console.log('提交数据:', requestData.page_list);
-        // console.log('提交数据:', requestData.page_list_fields);
-        // console.log('提交数据:', requestData.page_layout);
-        // console.log('提交数据:', requestData.page_layout_fields);
+        const requestData = { ...this.formData };
         const response = await axios.put(`http://127.0.0.1:8000/api/main/${accountId}/`, requestData);
         if (response.status === 200) {
           this.$message.success("更新成功！");
-          this.$router.push("/");
+          this.$router.go(-1);
         }
       } catch (error) {
         console.error("更新失败:", error);
-        if (error.response) {
-          switch (error.response.status) {
-            case 404:
-              this.$message.error("账户不存在！");
-              break;
-            case 500:
-              this.$message.error("服务器错误，请重试！");
-              break;
-            default:
-              this.$message.error("更新失败，请重试！");
-          }
-        } else {
-          this.$message.error("网络错误，请检查连接！");
+        this.handleError(error);
+      }
+    },
+    goBack() {
+      this.$router.go(-1);
+    },
+    handleError(error) {
+      if (error.response) {
+        switch (error.response.status) {
+          case 404:
+            this.$message.error("数据不存在！");
+            break;
+          case 500:
+            this.$message.error("服务器错误，请重试！");
+            break;
+          default:
+            this.$message.error("获取数据失败，请重试！");
         }
+      } else {
+        this.$message.error("网络错误，请检查连接！");
       }
     },
   },

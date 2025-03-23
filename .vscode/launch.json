@@ -12,12 +12,12 @@
             "args": [
                 "runserver"
             ],
-            "django": true,
-            "env": {
-                "DJANGO_SETTINGS_MODULE": "config.settings"
-            },
-            "console": "integratedTerminal"
-        },
+        //     "django": true,
+        //     "env": {
+        //         "DJANGO_SETTINGS_MODULE": "config.settings"
+        //     },
+        //     "console": "integratedTerminal"
+        // },
         // {
         //     "name": "Django: migrate",
         //     "type": "debugpy",

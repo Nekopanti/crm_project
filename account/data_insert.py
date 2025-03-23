@@ -34,7 +34,7 @@ class DataInsert:
                 self.object1 = Object.objects.create(
                     name="account",
                     label="医生",
-                    table_name="t_accounts",
+                    table_name="t_account",
                     deleted="0",
                 )
 
